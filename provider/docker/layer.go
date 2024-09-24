@@ -23,7 +23,7 @@ import (
 	"log/slog"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	scanner_errors "github.com/IBM/cbomkit-theia/scanner/errors"
+	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/filetree/filenode"
@@ -31,14 +31,14 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-// Struct to represent a single layer in an ActiveImage
+// Layer Struct to represent a single layer in an ActiveImage
 type Layer struct { // implements Filesystem
 	*image.Layer
 	index int
 	image *ActiveImage
 }
 
-// Walk all files in the squashed layer using fn
+// WalkDir Walk all files in the squashed layer using fn
 func (layer Layer) WalkDir(fn filesystem.SimpleWalkDirFunc) error {
 	return layer.SquashedTree.Walk(
 		func(path file.Path, f filenode.FileNode) error {
@@ -48,7 +48,7 @@ func (layer Layer) WalkDir(fn filesystem.SimpleWalkDirFunc) error {
 
 			err := fn(string(path))
 
-			if errors.Is(err, scanner_errors.ErrParsingFailedAlthoughChecked) {
+			if errors.Is(err, scannererrors.ErrParsingFailedAlthoughChecked) {
 				slog.Warn(err.Error())
 				return nil
 			} else {
@@ -57,7 +57,7 @@ func (layer Layer) WalkDir(fn filesystem.SimpleWalkDirFunc) error {
 		}, nil)
 }
 
-// Read a file from this layer
+// Open Read a file from this layer
 func (layer Layer) Open(path string) (io.ReadCloser, error) {
 	readCloser, err := layer.OpenPathFromSquash(file.Path(path))
 	if err != nil {
@@ -67,12 +67,12 @@ func (layer Layer) Open(path string) (io.ReadCloser, error) {
 	return readCloser, err
 }
 
-// Get the image config
+// GetConfig Get the image config
 func (layer Layer) GetConfig() (config v1.Config, ok bool) {
 	return layer.image.GetConfig()
 }
 
-// Get a unique string for this layer in the image; can be used for logging etc.
+// GetIdentifier Get a unique string for this layer in the image; can be used for logging etc.
 func (layer Layer) GetIdentifier() string {
 	return fmt.Sprintf("Docker Image Layer (id:%v, layer:%v)", layer.image.id, layer.index)
 }

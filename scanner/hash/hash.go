@@ -29,7 +29,7 @@ type cleaner struct {
 	unset func(comp *cdx.Component) any
 }
 
-func HashStruct8Byte(a any) [8]byte {
+func Struct8Byte(a any) [8]byte {
 	hash, err := hashstructure.Hash(a, hashstructure.FormatV2, &hashstructure.HashOptions{
 		ZeroNil:      true,
 		SlicesAsSets: true,
@@ -44,7 +44,7 @@ func HashStruct8Byte(a any) [8]byte {
 	return b8
 }
 
-func HashCDXComponentWithoutRefs(a cdx.Component) [8]byte {
+func CdxComponentWithoutRefs(a cdx.Component) [8]byte {
 	cleaners := []cleaner{
 		{
 			set: func(comp *cdx.Component, value any) {
@@ -145,28 +145,5 @@ func HashCDXComponentWithoutRefs(a cdx.Component) [8]byte {
 		}
 	}(cleaners, a, temp)
 
-	return HashStruct8Byte(a)
-}
-
-func HashCDXComponentWithoutRefsWithoutEvidence(a cdx.Component) [8]byte {
-	cleaner := cleaner{
-		set: func(comp *cdx.Component, value any) {
-			if comp.Evidence != nil {
-				comp.Evidence = value.(*cdx.Evidence)
-			}
-		},
-		unset: func(comp *cdx.Component) any {
-			if comp.Evidence != nil {
-				temp := comp.Evidence
-				comp.Evidence = new(cdx.Evidence)
-				return temp
-			}
-			return nil
-		},
-	}
-
-	temp := cleaner.unset(&a)
-	defer cleaner.set(&a, temp)
-
-	return HashCDXComponentWithoutRefs(a)
+	return Struct8Byte(a)
 }

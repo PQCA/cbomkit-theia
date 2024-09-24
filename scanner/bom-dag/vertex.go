@@ -35,14 +35,14 @@ type bomDAGVertex interface {
 	string() string
 }
 
-func hashBOMDAGVertex(bomDAGVertex bomDAGVertex) BomDAGVertexHash {
+func hashBOMDAGVertex(bomDAGVertex bomDAGVertex) VertexHash {
 	switch bomDAGVertex.getType() {
 	case bomDAGVertexTypeComponent:
-		return hash.HashCDXComponentWithoutRefs(bomDAGVertex.(vertexComponent).Component)
+		return hash.CdxComponentWithoutRefs(bomDAGVertex.(vertexComponent).Component)
 	case bomDAGVertexTypeRoot:
-		return BomDAGVertexHash{0}
+		return VertexHash{0}
 	case bomDAGVertexTypeOccurrence:
-		return hash.HashStruct8Byte(bomDAGVertex.(vertexOccurrence))
+		return hash.Struct8Byte(bomDAGVertex.(vertexOccurrence))
 	default:
 		panic("Unsupported BOM DAG Vertex Type!")
 	}

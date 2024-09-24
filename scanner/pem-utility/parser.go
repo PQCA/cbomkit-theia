@@ -41,15 +41,15 @@ type Filter struct {
 	List       []PEMBlockType
 }
 
-// Used to specify whether a filter is an allow- or blocklist
+// PEMTypeFilterType Used to specify whether a filter is an allow- or blocklist
 type PEMTypeFilterType bool
 
 const (
-	PEMTypeFilterTypeAllowlist PEMTypeFilterType = true  // Allow List
-	PEMTypeFilterTypeBlocklist PEMTypeFilterType = false // Block List
+	PEMTypeFilterTypeAllowlist PEMTypeFilterType = true  // Allowlist
+	PEMTypeFilterTypeBlocklist PEMTypeFilterType = false // Blocklist
 )
 
-// A not complete list of PEMBlockTypes that can be detected currently
+// PEMBlockType A not complete list of PEMBlockTypes that can be detected currently
 type PEMBlockType string
 
 const (
@@ -78,7 +78,8 @@ func parsePEMToBlocks(raw []byte) []*pem.Block {
 	return blocks
 }
 
-// Parse a the []byte of a PEM file to a map containing the *pem.Block and a PEMBlockType for each block
+// ParsePEMToBlocksWithTypes Parse the []byte of a PEM file to a map
+// containing the *pem.Block and a PEMBlockType for each block
 func ParsePEMToBlocksWithTypes(raw []byte) map[*pem.Block]PEMBlockType {
 	blocks := parsePEMToBlocks(raw)
 
@@ -91,7 +92,7 @@ func ParsePEMToBlocksWithTypes(raw []byte) map[*pem.Block]PEMBlockType {
 	return blocksWithType
 }
 
-// Just like ParsePEMToBlocksWithTypes but uses a filter for filtering
+// ParsePEMToBlocksWithTypeFilter Just like ParsePEMToBlocksWithTypes but uses a filter for filtering
 func ParsePEMToBlocksWithTypeFilter(raw []byte, filter Filter) map[*pem.Block]PEMBlockType {
 	blocksWithType := ParsePEMToBlocksWithTypes(raw)
 	filteredBlocksWithType := make(map[*pem.Block]PEMBlockType)
@@ -107,7 +108,7 @@ func ParsePEMToBlocksWithTypeFilter(raw []byte, filter Filter) map[*pem.Block]PE
 
 var errUnknownKeyAlgorithm = errors.New("key block uses unknown algorithm")
 
-// Generate cyclonedx-go components from a block containing a key
+// GenerateComponentsFromPEMKeyBlock Generate cyclone-go components from a block containing a key
 func GenerateComponentsFromPEMKeyBlock(block *pem.Block) ([]cdx.Component, error) {
 	switch PEMBlockType(block.Type) {
 

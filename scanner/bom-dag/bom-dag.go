@@ -18,48 +18,47 @@ package bomdag
 
 import (
 	"encoding/hex"
+	"errors"
 	"fmt"
-	"log/slog"
-	"net/url"
-	"os"
-	"path/filepath"
-
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/dominikbraun/graph"
-	"github.com/dominikbraun/graph/draw"
+	"log/slog"
 )
 
-// Type that hold the hash of a BomDAG vertex
-type BomDAGVertexHash = [8]byte
+// VertexHash BomDAGVertexHash Type that holds the hash of a BomDAG vertex
+type VertexHash = [8]byte
 
 // BomDAG represents a directed, acyclic graph of several interconnected components
 type BomDAG struct {
-	graph.Graph[BomDAGVertexHash, bomDAGVertex]
-	Root BomDAGVertexHash // Hash of the root component
+	graph.Graph[VertexHash, bomDAGVertex]
+	Root VertexHash // Hash of the root component
 }
 
 func NewBomDAG() BomDAG {
 	rootComponent := vertexRoot{}
 	rootHash := hashBOMDAGVertex(rootComponent)
 	g := graph.New(hashBOMDAGVertex, graph.Acyclic(), graph.Directed(), graph.PreventCycles(), graph.Rooted())
-	g.AddVertex(rootComponent, getLabelForBOMDAGVertex(rootComponent))
+	err := g.AddVertex(rootComponent, getLabelForBOMDAGVertex(rootComponent))
+	if err != nil {
+		return BomDAG{}
+	}
 	return BomDAG{
 		Graph: g,
 		Root:  rootHash,
 	}
 }
 
-// Type defining the different types of dependencies that components can have in the BomDAG
+// BomDAGDependencyType Type defining the different types of dependencies that components can have in the BomDAG
 type BomDAGDependencyType string
 
 const (
-	BomDAGDependencyTypeDependsOn                                            BomDAGDependencyType = "dependsOn"
-	BomDAGDependencyTypeCertificatePropertiesSignatureAlgorithmRef           BomDAGDependencyType = "CertificatePropertiesSignatureAlgorithmRef"
-	BomDAGDependencyTypeCertificatePropertiesSubjectPublicKeyRef             BomDAGDependencyType = "CertificatePropertiesSubjectPublicKeyRef"
-	BomDAGDependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef          BomDAGDependencyType = "RelatedCryptoMaterialPropertiesAlgorithmRef"
-	BomDAGDependencyTypeRelatedCryptoMaterialPropertiesSecuredByAlgorithmRef BomDAGDependencyType = "RelatedCryptoMaterialPropertiessecuredByAlgorithmRef"
-	BomDAGDependencyTypeProtocolPropertiesCryptoRefArrayElement              BomDAGDependencyType = "protocolPropertiescryptoRefArray"
-	BomDAGDependencyTypeOccurrence                                           BomDAGDependencyType = "occurrence"
+	DependencyTypeDependsOn                                            BomDAGDependencyType = "dependsOn"
+	DependencyTypeCertificatePropertiesSignatureAlgorithmRef           BomDAGDependencyType = "CertificatePropertiesSignatureAlgorithmRef"
+	DependencyTypeCertificatePropertiesSubjectPublicKeyRef             BomDAGDependencyType = "CertificatePropertiesSubjectPublicKeyRef"
+	DependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef          BomDAGDependencyType = "RelatedCryptoMaterialPropertiesAlgorithmRef"
+	DependencyTypeRelatedCryptoMaterialPropertiesSecuredByAlgorithmRef BomDAGDependencyType = "RelatedCryptoMaterialPropertiessecuredByAlgorithmRef"
+	DependencyTypeProtocolPropertiesCryptoRefArrayElement              BomDAGDependencyType = "protocolPropertiescryptoRefArray"
+	DependencyTypeOccurrence                                           BomDAGDependencyType = "occurrence"
 )
 
 func EdgeDependencyType(dependencyType BomDAGDependencyType) func(*graph.EdgeProperties) {
@@ -73,7 +72,7 @@ func EdgeDependencyType(dependencyType BomDAGDependencyType) func(*graph.EdgePro
 	}
 }
 
-// Generate slice of cyclonedx-go components from the graph; also return a map of dependencies (e.g. "bomref1" depends on "bomref2" and "bomref3")
+// GetCDXComponents Generate slice of cyclonedx-go components from the graph; also return a map of dependencies (e.g. "bomref1" depends on "bomref2" and "bomref3")
 func (bomDAG *BomDAG) GetCDXComponents() ([]cdx.Component, map[cdx.BOMReference][]string, error) {
 	components := make([]cdx.Component, 0)
 	dependencyMap := make(map[cdx.BOMReference][]string, 0)
@@ -99,25 +98,25 @@ func (bomDAG *BomDAG) GetCDXComponents() ([]cdx.Component, map[cdx.BOMReference]
 			targetBomRef := cdx.BOMReference(hex.EncodeToString(edge.Target[:]))
 			for edgeType := range edge.Properties.Attributes {
 				switch edgeType {
-				case string(BomDAGDependencyTypeDependsOn):
+				case string(DependencyTypeDependsOn):
 					if _, ok := dependencyMap[cdx.BOMReference(component.BOMRef)]; !ok {
 						dependencyMap[cdx.BOMReference(component.BOMRef)] = make([]string, 0)
 					}
 					dependencyMap[cdx.BOMReference(component.BOMRef)] = append(dependencyMap[cdx.BOMReference(component.BOMRef)], string(targetBomRef))
-				case string(BomDAGDependencyTypeCertificatePropertiesSignatureAlgorithmRef):
+				case string(DependencyTypeCertificatePropertiesSignatureAlgorithmRef):
 					component.CryptoProperties.CertificateProperties.SignatureAlgorithmRef = targetBomRef
-				case string(BomDAGDependencyTypeCertificatePropertiesSubjectPublicKeyRef):
+				case string(DependencyTypeCertificatePropertiesSubjectPublicKeyRef):
 					component.CryptoProperties.CertificateProperties.SubjectPublicKeyRef = targetBomRef
-				case string(BomDAGDependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef):
+				case string(DependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef):
 					component.CryptoProperties.RelatedCryptoMaterialProperties.AlgorithmRef = targetBomRef
-				case string(BomDAGDependencyTypeRelatedCryptoMaterialPropertiesSecuredByAlgorithmRef):
+				case string(DependencyTypeRelatedCryptoMaterialPropertiesSecuredByAlgorithmRef):
 					component.CryptoProperties.RelatedCryptoMaterialProperties.SecuredBy.AlgorithmRef = targetBomRef
-				case string(BomDAGDependencyTypeProtocolPropertiesCryptoRefArrayElement):
+				case string(DependencyTypeProtocolPropertiesCryptoRefArrayElement):
 					if component.CryptoProperties.ProtocolProperties.CryptoRefArray == nil {
 						component.CryptoProperties.ProtocolProperties.CryptoRefArray = new([]cdx.BOMReference)
 					}
 					*component.CryptoProperties.ProtocolProperties.CryptoRefArray = append(*component.CryptoProperties.ProtocolProperties.CryptoRefArray, targetBomRef)
-				case string(BomDAGDependencyTypeOccurrence):
+				case string(DependencyTypeOccurrence):
 					targetVertex, _ := bomDAG.Vertex(edge.Target)
 					*component.Evidence.Occurrences = append(*component.Evidence.Occurrences, targetVertex.(vertexOccurrence).EvidenceOccurrence)
 				}
@@ -165,7 +164,7 @@ func (bomDAG *BomDAG) Merge(other BomDAG) error {
 	return nil
 }
 
-func (bomDAG *BomDAG) mergeEdgePropertyAttributes(otherEdge graph.Edge[BomDAGVertexHash]) error {
+func (bomDAG *BomDAG) mergeEdgePropertyAttributes(otherEdge graph.Edge[VertexHash]) error {
 	mainEdge, err := bomDAG.Edge(otherEdge.Source, otherEdge.Target)
 
 	if err != nil {
@@ -184,7 +183,10 @@ func (bomDAG *BomDAG) mergeEdgePropertyAttributes(otherEdge graph.Edge[BomDAGVer
 				return fmt.Errorf("attribute %v cannot be merged (both are set and cannot merge strings); mainValue: %v, otherValue: %v", key, mainValue, otherValue)
 			}
 		} else {
-			bomDAG.UpdateEdge(otherEdge.Source, otherEdge.Target, graph.EdgeAttribute(key, otherValue))
+			err = bomDAG.UpdateEdge(otherEdge.Source, otherEdge.Target, graph.EdgeAttribute(key, otherValue))
+			if err != nil {
+				slog.Error(err.Error())
+			}
 		}
 	}
 
@@ -222,17 +224,17 @@ func copyVertexProperties(source graph.VertexProperties) func(*graph.VertexPrope
 	}
 }
 
-// Add a component to this graph;
+// AddCDXComponent Add a component to this graph;
 // This should be mainly used to add components to the graph
-func (bomDAG *BomDAG) AddCDXComponent(value cdx.Component, options ...func(*graph.VertexProperties)) (valueHash BomDAGVertexHash, err error) {
+func (bomDAG *BomDAG) AddCDXComponent(value cdx.Component, options ...func(*graph.VertexProperties)) (valueHash VertexHash, err error) {
 	// Extract the occurrence component
-	var occurrenceHashes []BomDAGVertexHash
+	var occurrenceHashes []VertexHash
 	if value.Evidence != nil && value.Evidence.Occurrences != nil && len(*value.Evidence.Occurrences) > 0 {
-		occurrenceHashes = make([]BomDAGVertexHash, len(*value.Evidence.Occurrences))
+		occurrenceHashes = make([]VertexHash, len(*value.Evidence.Occurrences))
 		for i, occurrence := range *value.Evidence.Occurrences {
 			hash, err := bomDAG.getVertexOrAddNew(vertexOccurrence{occurrence})
 			if err != nil {
-				return BomDAGVertexHash{}, err
+				return VertexHash{}, err
 			}
 			occurrenceHashes[i] = hash
 		}
@@ -248,37 +250,24 @@ func (bomDAG *BomDAG) AddCDXComponent(value cdx.Component, options ...func(*grap
 	}
 
 	for _, occurrenceHash := range occurrenceHashes {
-		bomDAG.AddEdge(valueHash, occurrenceHash, EdgeDependencyType(BomDAGDependencyTypeOccurrence))
+		err = bomDAG.AddEdge(valueHash, occurrenceHash, EdgeDependencyType(DependencyTypeOccurrence))
+		if err != nil {
+			slog.Error(err.Error())
+		}
 	}
 
 	return valueHash, nil
 }
 
-func (bomDAG *BomDAG) getVertexOrAddNew(value bomDAGVertex, options ...func(*graph.VertexProperties)) (hash BomDAGVertexHash, err error) {
+func (bomDAG *BomDAG) getVertexOrAddNew(value bomDAGVertex, options ...func(*graph.VertexProperties)) (hash VertexHash, err error) {
 	hash = hashBOMDAGVertex(value)
 
 	// Does the component already exist?
 	_, err = bomDAG.Vertex(hash)
-	if err != graph.ErrVertexNotFound {
+	if !errors.Is(err, graph.ErrVertexNotFound) {
 		return hash, nil
 	}
 
 	err = bomDAG.AddVertex(value, append(options, getLabelForBOMDAGVertex(value))...)
 	return hash, err
-}
-
-// Write a graphical representation of the graph to a file
-func (bomDAG *BomDAG) WriteToFile(filenamePrefix string) {
-	if err := os.MkdirAll(filepath.Join(".", "cbomkit-theia_graphs"), os.ModePerm); err != nil {
-		slog.Warn("Failed to create directory for graphs. Skipping this step.", "error", err.Error())
-	} else {
-		file, err := os.Create(filepath.Join(".", "cbomkit-theia_graphs", url.PathEscape(fmt.Sprintf("%v_certificate_graph.dot", filenamePrefix))))
-		if err != nil {
-			slog.Warn("Failed to generate DOT file for graph", "error", err.Error())
-		}
-		err = draw.DOT(bomDAG, file)
-		if err != nil {
-			slog.Warn("Failed to write to DOT file for graph", "error", err.Error())
-		}
-	}
 }

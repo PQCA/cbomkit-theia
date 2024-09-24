@@ -32,20 +32,20 @@ import (
 )
 
 func NewSecretsPlugin() (plugins.Plugin, error) {
-	return &SecretsPlugin{}, nil
+	return &Plugin{}, nil
 }
 
-type SecretsPlugin struct{}
+type Plugin struct{}
 
-func (SecretsPlugin) GetName() string {
+func (*Plugin) GetName() string {
 	return "Secret Plugin"
 }
 
-func (SecretsPlugin) GetExplanation() string {
+func (*Plugin) GetExplanation() string {
 	return "Find Secrets & Keys"
 }
 
-func (SecretsPlugin) GetType() plugins.PluginType {
+func (*Plugin) GetType() plugins.PluginType {
 	return plugins.PluginTypeAppend
 }
 
@@ -55,7 +55,7 @@ type findingWithMetadata struct {
 	raw  []byte
 }
 
-func (SecretsPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
+func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	detector, err := detect.NewDetectorDefaultConfig()
 	if err != nil {
 		return err
@@ -64,7 +64,7 @@ func (SecretsPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	findings := make([]findingWithMetadata, 0)
 
 	// Detect findings
-	fs.WalkDir(func(path string) error {
+	err = fs.WalkDir(func(path string) error {
 		readCloser, err := fs.Open(path)
 		if err != nil {
 			return err
@@ -105,6 +105,10 @@ func (SecretsPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		return nil
 	})
 
+	if err != nil {
+		return err
+	}
+
 	bomDag := bomdag.NewBomDAG()
 
 	components := make([]cdx.Component, 0)
@@ -124,7 +128,10 @@ func (SecretsPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		if err != nil {
 			return err
 		}
-		bomDag.AddEdge(bomDag.Root, hash)
+		err = bomDag.AddEdge(bomDag.Root, hash)
+		if err != nil {
+			slog.Error(err.Error())
+		}
 	}
 
 	// DAG to components

@@ -31,15 +31,15 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-// A X.509 certificate with additional metadata that is not part of the x509.Certificate struct
+// An X.509 certificate with additional metadata that is not part of the x509.Certificate struct
 type x509CertificateWithMetadata struct {
 	*x509.Certificate
 	path   string
 	format string
 }
 
-// During parsing of the x509.Certificate a unknown algorithm was found
-var errX509UnknownAlgorithm = errors.New("X.509 certificate has unknown algorithm")
+// During parsing of the x509.Certificate an unknown algorithm was found
+var errX509UnknownAlgorithm = errors.New("x.509 certificate has unknown algorithm")
 
 // Create a new x509CertificateWithMetadata from a x509.Certificate and a path
 func newX509CertificateWithMetadata(cert *x509.Certificate, path string) (*x509CertificateWithMetadata, error) {
@@ -92,7 +92,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) generateDAG() (b
 	publicKeyAlgorithmHash, err2 := dag.AddCDXComponent(publicKeyAlgorithm)
 	publicKeyHash, err3 := dag.AddCDXComponent(publicKey)
 
-	var signatureAlgorithmHash, signatureAlgorithmPKEHash, signatureAlgorithmHashHash bomdag.BomDAGVertexHash
+	var signatureAlgorithmHash, signatureAlgorithmPKEHash, signatureAlgorithmHashHash bomdag.VertexHash
 	var err4, err5, err6 error
 	if signatureAlgorithm.signature != nil {
 		signatureAlgorithmHash, err4 = dag.AddCDXComponent(*signatureAlgorithm.signature)
@@ -112,15 +112,15 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) generateDAG() (b
 	// Creating Edges in DAG
 	err6 = dag.AddEdge(dag.Root, certificateHash)
 	err1 = dag.AddEdge(certificateHash, publicKeyHash,
-		bomdag.EdgeDependencyType(bomdag.BomDAGDependencyTypeCertificatePropertiesSubjectPublicKeyRef))
+		bomdag.EdgeDependencyType(bomdag.DependencyTypeCertificatePropertiesSubjectPublicKeyRef))
 	err2 = dag.AddEdge(publicKeyHash, publicKeyAlgorithmHash,
-		bomdag.EdgeDependencyType(bomdag.BomDAGDependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef))
+		bomdag.EdgeDependencyType(bomdag.DependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef))
 	err3 = dag.AddEdge(certificateHash, signatureAlgorithmHash,
-		bomdag.EdgeDependencyType(bomdag.BomDAGDependencyTypeCertificatePropertiesSignatureAlgorithmRef))
+		bomdag.EdgeDependencyType(bomdag.DependencyTypeCertificatePropertiesSignatureAlgorithmRef))
 	err4 = dag.AddEdge(signatureAlgorithmHash, signatureAlgorithmPKEHash,
-		bomdag.EdgeDependencyType(bomdag.BomDAGDependencyTypeDependsOn))
+		bomdag.EdgeDependencyType(bomdag.DependencyTypeDependsOn))
 	err5 = dag.AddEdge(signatureAlgorithmHash, signatureAlgorithmHashHash,
-		bomdag.EdgeDependencyType(bomdag.BomDAGDependencyTypeDependsOn))
+		bomdag.EdgeDependencyType(bomdag.DependencyTypeDependsOn))
 
 	return dag, errors.Join(err1, err2, err3, err4, err5, err6)
 }

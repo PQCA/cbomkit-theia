@@ -17,7 +17,7 @@
 package javasecurity
 
 import (
-	go_errors "errors"
+	goerrors "errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -26,7 +26,7 @@ import (
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	advancedcomponentslice "github.com/IBM/cbomkit-theia/scanner/componentwithconfidenceslice"
-	scanner_errors "github.com/IBM/cbomkit-theia/scanner/errors"
+	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -34,31 +34,32 @@ import (
 	"github.com/magiconair/properties"
 )
 
-// Represents the java security plugin in a specific scanning context
+// Plugin Represents the java security plugin in a specific scanning context
 // Implements the config/ConfigPlugin interface
-type JavaSecurityPlugin struct{}
+type Plugin struct{}
 
-// Creates underlying data structure for evaluation
+// NewJavaSecurityPlugin Creates underlying data structure for evaluation
 func NewJavaSecurityPlugin() (plugins.Plugin, error) {
-	return &JavaSecurityPlugin{}, nil
+	return &Plugin{}, nil
 }
 
-// Get the name of the plugin for debugging purposes
-func (JavaSecurityPlugin) GetName() string {
+// GetName Get the name of the plugin for debugging purposes
+func (*Plugin) GetName() string {
 	return "java.security Plugin"
 }
 
-func (JavaSecurityPlugin) GetExplanation() string {
+func (*Plugin) GetExplanation() string {
 	return "Verify the executability of cryptographic assets from Java code\nAdds a confidence level (0-100) to the CBOM components to show how likely it is that this component is actually executable"
 }
 
-// Get the type of the plugin
-func (JavaSecurityPlugin) GetType() plugins.PluginType {
+// GetType Get the type of the plugin
+func (*Plugin) GetType() plugins.PluginType {
 	return plugins.PluginTypeVerify
 }
 
-// High-level function to update a list of components (e.g. remove components and add new ones) based on the underlying filesystem
-func (javaSecurityPlugin *JavaSecurityPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
+// UpdateBOM High-level function to update a list of components
+// (e.g., remove components and add new ones) based on the underlying filesystem
+func (javaSecurityPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	slog.Warn("Current version of CBOMkit-theia does not take dynamic changes of java security properties (e.g. via System.setProperty) into account. Use with caution!")
 
 	if bom.Components == nil {
@@ -78,15 +79,15 @@ func (javaSecurityPlugin *JavaSecurityPlugin) UpdateBOM(fs filesystem.Filesystem
 				slog.Info("Adding java.security config file", "path", path)
 				readCloser, err := fs.Open(path)
 				if err != nil {
-					return scanner_errors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
 				}
 				content, err := filesystem.ReadAllClose(readCloser)
 				if err != nil {
-					return scanner_errors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
 				}
 				config, err := properties.LoadString(string(content))
 				if err != nil {
-					return scanner_errors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
 				}
 
 				configurations[path] = config
@@ -122,7 +123,7 @@ func (javaSecurityPlugin *JavaSecurityPlugin) UpdateBOM(fs filesystem.Filesystem
 			if comp.CryptoProperties != nil {
 				err := security.updateComponent(i, advancedCompSlice)
 				if err != nil {
-					if go_errors.Is(err, scanner_errors.ErrInsufficientInformation) {
+					if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
 						insufficientInformationErrors = append(insufficientInformationErrors, err)
 					} else {
 						return fmt.Errorf("scanner java: error while updating component %v\n%w", advancedCompSlice.GetByIndex(i).Name, err)
@@ -136,9 +137,9 @@ func (javaSecurityPlugin *JavaSecurityPlugin) UpdateBOM(fs filesystem.Filesystem
 		}
 	}
 
-	joinedinsufficientInformationErrors := go_errors.Join(insufficientInformationErrors...)
-	if joinedinsufficientInformationErrors != nil {
-		slog.Warn("Run finished with insufficient information errors", "errors", go_errors.Join(insufficientInformationErrors...).Error())
+	joinedInsufficientInformationErrors := goerrors.Join(insufficientInformationErrors...)
+	if joinedInsufficientInformationErrors != nil {
+		slog.Warn("Run finished with insufficient information errors", "errors", goerrors.Join(insufficientInformationErrors...).Error())
 	}
 
 	*bom.Components = advancedCompSlice.GetComponentSlice()
@@ -155,7 +156,7 @@ func chooseFirstConfiguration(configurations map[string]*properties.Properties) 
 	return nil
 }
 
-func (*JavaSecurityPlugin) chooseMostLikelyConfiguration(configurations map[string]*properties.Properties, dockerConfig v1.Config) (chosenProp *properties.Properties) {
+func (*Plugin) chooseMostLikelyConfiguration(configurations map[string]*properties.Properties, dockerConfig v1.Config) (chosenProp *properties.Properties) {
 	jdkPath, ok := getJDKPath(dockerConfig)
 	if !ok {
 		return chooseFirstConfiguration(configurations)
@@ -203,7 +204,7 @@ func getJDKPathFromEnvironmentVariables(envVariables []string) (value string, ok
 	return "", false
 }
 
-const LINE_SEPARATOR = "/"
+const LineSeparator = "/"
 
 func getJDKPathFromRunCommand(dockerConfig v1.Config) (value string, ok bool) {
 	for _, s := range append(dockerConfig.Cmd, dockerConfig.Entrypoint...) {
@@ -212,10 +213,10 @@ func getJDKPathFromRunCommand(dockerConfig v1.Config) (value string, ok bool) {
 			fields := strings.Fields(s)
 			if len(fields) > 0 {
 				path := fields[0]
-				pathList := strings.Split(path, LINE_SEPARATOR)
+				pathList := strings.Split(path, LineSeparator)
 				for i, pathElement := range pathList {
 					if strings.Contains(pathElement, "jdk") {
-						return LINE_SEPARATOR + filepath.Join(pathList[:i+1]...), true
+						return LineSeparator + filepath.Join(pathList[:i+1]...), true
 					}
 				}
 			}

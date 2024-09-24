@@ -26,7 +26,7 @@ import (
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	scanner_errors "github.com/IBM/cbomkit-theia/scanner/errors"
+	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 	pemutility "github.com/IBM/cbomkit-theia/scanner/pem-utility"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
@@ -38,35 +38,38 @@ import (
 )
 
 // Plugin to parse certificates from the filesystem
-type CertificatesPlugin struct{}
+type Plugin struct{}
 
-// Get the name of the plugin
-func (CertificatesPlugin) GetName() string {
+// GetName Get the name of the plugin
+func (*Plugin) GetName() string {
 	return "Certificate File Plugin"
 }
 
-func (CertificatesPlugin) GetExplanation() string {
+func (*Plugin) GetExplanation() string {
 	return "Find x.509 certificates"
 }
 
-// Get the type of the plugin
-func (CertificatesPlugin) GetType() plugins.PluginType {
+// GetType Get the type of the plugin
+func (*Plugin) GetType() plugins.PluginType {
 	return plugins.PluginTypeAppend
 }
 
-// Parse all certificates from the given filesystem
+// NewCertificatePlugin Parse all certificates from the given filesystem
 func NewCertificatePlugin() (plugins.Plugin, error) {
-	return &CertificatesPlugin{}, nil
+	return &Plugin{}, nil
 }
 
-// Add the found certificates to the slice of components
-func (certificatesPlugin *CertificatesPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
-	certificates := []*x509CertificateWithMetadata{}
+// UpdateBOM Add the found certificates to the slice of components
+func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
+	var certificates []*x509CertificateWithMetadata
 
 	// Set GODEBUG to allow negative serial numbers (see https://github.com/golang/go/commit/db13584baedce4909915cb4631555f6dbd7b8c38)
-	setX509NegativeSerial()
+	err := setX509NegativeSerial()
+	if err != nil {
+		slog.Error(err.Error())
+	}
 
-	err := fs.WalkDir(
+	err = fs.WalkDir(
 		func(path string) (err error) {
 			switch filepath.Ext(path) {
 			case ".pem", ".cer", ".cert", ".der", ".ca-bundle", ".crt":
@@ -80,7 +83,7 @@ func (certificatesPlugin *CertificatesPlugin) UpdateBOM(fs filesystem.Filesystem
 				}
 				certs, err := certificatesPlugin.parsex509CertFromPath(raw, path)
 				if err != nil {
-					return scanner_errors.GetParsingFailedAlthoughCheckedError(err, certificatesPlugin.GetName())
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, certificatesPlugin.GetName())
 				}
 				certificates = append(certificates, certs...)
 			case ".p7a", ".p7b", ".p7c", ".p7r", ".p7s", ".spc":
@@ -94,7 +97,7 @@ func (certificatesPlugin *CertificatesPlugin) UpdateBOM(fs filesystem.Filesystem
 				}
 				certs, err := certificatesPlugin.parsePKCS7FromPath(raw, path)
 				if err != nil {
-					return scanner_errors.GetParsingFailedAlthoughCheckedError(err, certificatesPlugin.GetName())
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, certificatesPlugin.GetName())
 				}
 				certificates = append(certificates, certs...)
 			default:
@@ -109,7 +112,10 @@ func (certificatesPlugin *CertificatesPlugin) UpdateBOM(fs filesystem.Filesystem
 	}
 
 	// Set GODEBUG to old setting
-	removeX509NegativeSerial()
+	err = removeX509NegativeSerial()
+	if err != nil {
+		slog.Error(err.Error())
+	}
 
 	slog.Debug("Certificate searching done", "count", len(certificates))
 
@@ -157,7 +163,7 @@ func (certificatesPlugin *CertificatesPlugin) UpdateBOM(fs filesystem.Filesystem
 }
 
 // Parse a X.509 certificate from the given path (in base64 PEM or binary DER)
-func (certificatesPlugin *CertificatesPlugin) parsex509CertFromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
+func (certificatesPlugin *Plugin) parsex509CertFromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
 	blocks := pemutility.ParsePEMToBlocksWithTypeFilter(raw, pemutility.Filter{
 		FilterType: pemutility.PEMTypeFilterTypeAllowlist,
 		List:       []pemutility.PEMBlockType{pemutility.PEMBlockTypeCertificate},
@@ -181,7 +187,7 @@ func (certificatesPlugin *CertificatesPlugin) parsex509CertFromPath(raw []byte, 
 }
 
 // Parse X.509 certificates from a PKCS7 file (base64 PEM format)
-func (certificatesPlugin CertificatesPlugin) parsePKCS7FromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
+func (certificatesPlugin *Plugin) parsePKCS7FromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
 	block, _ := pem.Decode(raw)
 
 	pkcs7Object, err := pkcs7.Parse(block.Bytes)
@@ -232,7 +238,7 @@ func MergeDependencyStructSlice(a []cdx.Dependency, b []cdx.Dependency) []cdx.De
 	return a
 }
 
-// Return index in slice if bomRef is found in slice or -1 if not present
+// IndexBomRefInDependencySlice Return index in slice if bomRef is found in slice or -1 if not present
 func IndexBomRefInDependencySlice(slice []cdx.Dependency, bomRef cdx.BOMReference) int {
 	for i, dep := range slice {
 		if dep.Ref == string(bomRef) {

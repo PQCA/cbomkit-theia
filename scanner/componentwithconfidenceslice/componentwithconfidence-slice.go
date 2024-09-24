@@ -22,32 +22,33 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-// CycloneDX component bundled with according ConfidenceLevel
-type componentWithConfidence struct {
+// ComponentWithConfidence CycloneDX component bundled with according ConfidenceLevel
+type ComponentWithConfidence struct {
 	*cdx.Component
 	Confidence           *confidencelevel.ConfidenceLevel
 	printConfidenceLevel bool
 }
 
-func (componentWithConfidence *componentWithConfidence) SetPrintConfidenceLevel(value bool) {
+func (componentWithConfidence *ComponentWithConfidence) SetPrintConfidenceLevel(value bool) {
 	componentWithConfidence.printConfidenceLevel = value
 }
 
-// Slice of componentWithConfidence with a map mapping BOMReference to index in the components slice; bomRefMap can be used to access members of components by BOMReference without searching for the BOMReference in the structs itself
+// ComponentWithConfidenceSlice Slice of componentWithConfidence with a map mapping BOMReference to index in the component slice;
+// bomRefMap can be used to access members of components by BOMReference without searching for the BOMReference in the structs itself
 type ComponentWithConfidenceSlice struct {
-	components []componentWithConfidence
+	components []ComponentWithConfidence
 	bomRefMap  map[cdx.BOMReference]int
 }
 
-// Generate a AdvancedComponentSlice from a slice of components
+// FromComponentSlice Generate a AdvancedComponentSlice from a slice of components
 func FromComponentSlice(slice []cdx.Component) *ComponentWithConfidenceSlice {
 	advancedComponentSlice := ComponentWithConfidenceSlice{
-		components: make([]componentWithConfidence, 0, len(slice)),
+		components: make([]ComponentWithConfidence, 0, len(slice)),
 		bomRefMap:  make(map[cdx.BOMReference]int),
 	}
 
 	for i, comp := range slice {
-		advancedComponentSlice.components = append(advancedComponentSlice.components, componentWithConfidence{
+		advancedComponentSlice.components = append(advancedComponentSlice.components, ComponentWithConfidence{
 			Component:            &comp,
 			Confidence:           confidencelevel.New(),
 			printConfidenceLevel: false,
@@ -61,22 +62,22 @@ func FromComponentSlice(slice []cdx.Component) *ComponentWithConfidenceSlice {
 	return &advancedComponentSlice
 }
 
-// Get member of AdvancedComponentSlice by index
-func (advancedComponentSlice *ComponentWithConfidenceSlice) GetByIndex(i int) *componentWithConfidence {
+// GetByIndex Get member of AdvancedComponentSlice by index
+func (advancedComponentSlice *ComponentWithConfidenceSlice) GetByIndex(i int) *ComponentWithConfidence {
 	return &advancedComponentSlice.components[i]
 }
 
-// Get member of AdvancedComponentSlice by BOMReference
-func (advancedComponentSlice *ComponentWithConfidenceSlice) GetByRef(ref cdx.BOMReference) (*componentWithConfidence, bool) {
+// GetByRef Get member of AdvancedComponentSlice by BOMReference
+func (advancedComponentSlice *ComponentWithConfidenceSlice) GetByRef(ref cdx.BOMReference) (*ComponentWithConfidence, bool) {
 	i, ok := advancedComponentSlice.bomRefMap[ref]
 	if !ok {
-		return &componentWithConfidence{}, false
+		return &ComponentWithConfidence{}, false
 	} else {
 		return &advancedComponentSlice.components[i], true
 	}
 }
 
-// Generate CycloneDX Components from this AdvancedComponentSlice; automatically sets the confidence_level property
+// GetComponentSlice Generate CycloneDX Components from this AdvancedComponentSlice; automatically sets the confidence_level property
 func (advancedComponentSlice *ComponentWithConfidenceSlice) GetComponentSlice() []cdx.Component {
 	finalCompSlice := make([]cdx.Component, 0, len(advancedComponentSlice.components))
 

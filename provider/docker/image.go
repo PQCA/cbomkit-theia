@@ -47,7 +47,7 @@ type ActiveImage struct {
 	client *client.Client
 }
 
-// Defer to this function to destroy the ActiveImage after use
+// TearDown Defer to this function to destroy the ActiveImage after use
 func (image ActiveImage) TearDown() {
 	slog.Info("Removing Image", "id", image.id)
 
@@ -65,12 +65,12 @@ func (image ActiveImage) TearDown() {
 	}
 }
 
-// Get the image config of this image
+// GetConfig Get the image config of this image
 func (image ActiveImage) GetConfig() (config v1.Config, ok bool) {
 	return image.Metadata.Config.Config, true
 }
 
-// Build new image from a dockerfile;
+// BuildNewImage Build new image from a dockerfile;
 // Caller is responsible to call image.TearDown() after usage
 func BuildNewImage(dockerfilePath string) (image ActiveImage, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -138,7 +138,7 @@ func BuildNewImage(dockerfilePath string) (image ActiveImage, err error) {
 	}, err
 }
 
-// Parses a DockerImage from an identifier, possibly pulling it from a registry;
+// GetPrebuiltImage Parses a DockerImage from an identifier, possibly pulling it from a registry;
 // Caller is responsible to call image.TearDown() after usage
 func GetPrebuiltImage(name string) (image ActiveImage, err error) {
 	slog.Info("Getting prebuilt image", "image", name)
@@ -176,12 +176,12 @@ func GetPrebuiltImage(name string) (image ActiveImage, err error) {
 	}, err
 }
 
-// Get a squashed filesystem at top layer
+// GetSquashedFilesystem Get a squashed filesystem at top layer
 func GetSquashedFilesystem(image ActiveImage) filesystem.Filesystem {
 	return GetSquashedFilesystemAtIndex(image, len(image.Layers)-1)
 }
 
-// Get a squashed filesystem at layer with index index
+// GetSquashedFilesystemAtIndex Get a squashed filesystem at layer with index
 func GetSquashedFilesystemAtIndex(image ActiveImage, index int) filesystem.Filesystem {
 	return Layer{
 		Layer: image.Layers[index],

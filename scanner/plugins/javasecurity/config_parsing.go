@@ -17,7 +17,7 @@
 package javasecurity
 
 import (
-	go_errors "errors"
+	goerrors "errors"
 	"fmt"
 	"log/slog"
 	"path/filepath"
@@ -26,7 +26,7 @@ import (
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	advancedcomponentslice "github.com/IBM/cbomkit-theia/scanner/componentwithconfidenceslice"
-	scanner_errors "github.com/IBM/cbomkit-theia/scanner/errors"
+	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
@@ -39,19 +39,19 @@ General
 =======
 */
 
-// Checks whether the current file at path is a java.security config file
-func (*JavaSecurityPlugin) isConfigFile(path string) bool {
+// Checks whether the current file at a path is a java.security config file
+func (*Plugin) isConfigFile(path string) bool {
 	// Check if this file is the java.security file and if that is the case extract the path of the active crypto.policy files
 	dir, _ := filepath.Split(path)
 	dir = filepath.Clean(dir)
 
-	// Check correct directory
+	// Check the correct directory
 	if !(strings.HasSuffix(dir, filepath.Join("jre", "lib", "security")) ||
 		strings.HasSuffix(dir, filepath.Join("conf", "security"))) {
 		return false
 	}
 
-	// Check file extension
+	// Check a file extension
 	ext := filepath.Ext(path)
 	if ext != ".security" {
 		return false
@@ -70,7 +70,7 @@ java.security related
 // JavaSecurity represents the java.security file(s) found on the system
 type JavaSecurity struct {
 	*properties.Properties
-	tlsDisabledAlgorithms []JavaSecurityAlgorithmRestriction
+	tlsDisabledAlgorithms []AlgorithmRestriction
 }
 
 func newJavaSecurity(properties *properties.Properties, fs filesystem.Filesystem) (JavaSecurity, error) {
@@ -98,10 +98,11 @@ func newJavaSecurity(properties *properties.Properties, fs filesystem.Filesystem
 	}, err
 }
 
-// Assesses if the component is from a source affected by this type of config (e.g. a java file), requires "Evidence" and "Occurrences" to be present in the BOM
+// Assesses if the component is from a source affected by this type of config (e.g., a java file),
+// requires "Evidence" and "Occurrences" to be present in the BOM
 func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool, error) {
 	if component.Evidence == nil || component.Evidence.Occurrences == nil { // If there is no evidence telling us that whether this component comes from a java file, we cannot assess it
-		return false, scanner_errors.GetInsufficientInformationError("cannot evaluate due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
+		return false, scannererrors.GetInsufficientInformationError("cannot evaluate due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
 	}
 
 	for _, occurrence := range *component.Evidence.Occurrences {
@@ -113,21 +114,20 @@ func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool,
 }
 
 // Update a single component; returns nil if component is not allowed
-func (javaSecurity *JavaSecurity) updateComponent(index int, advancedcomponentslice *advancedcomponentslice.ComponentWithConfidenceSlice) (err error) {
-
-	ok, err := javaSecurity.isComponentAffectedByConfig(*advancedcomponentslice.GetByIndex(index).Component)
+func (javaSecurity *JavaSecurity) updateComponent(index int, advancedComponentSlice *advancedcomponentslice.ComponentWithConfidenceSlice) (err error) {
+	ok, err := javaSecurity.isComponentAffectedByConfig(*advancedComponentSlice.GetByIndex(index).Component)
 
 	if ok {
-		advancedcomponentslice.GetByIndex(index).SetPrintConfidenceLevel(true)
+		advancedComponentSlice.GetByIndex(index).SetPrintConfidenceLevel(true)
 	} else {
-		if go_errors.Is(err, scanner_errors.ErrInsufficientInformation) {
+		if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
 			return err
 		}
 	}
 
-	switch advancedcomponentslice.GetByIndex(index).CryptoProperties.AssetType {
+	switch advancedComponentSlice.GetByIndex(index).CryptoProperties.AssetType {
 	case cdx.CryptoAssetTypeProtocol:
-		return javaSecurity.updateProtocolComponent(index, advancedcomponentslice)
+		return javaSecurity.updateProtocolComponent(index, advancedComponentSlice)
 	default:
 		return nil
 	}
@@ -140,7 +140,8 @@ func removeFromSlice[T interface{}](slice []T, s int) []T {
 	return append(slice[:s], slice[s+1:]...)
 }
 
-// Recursively get all comma-separated values of the property key. Recursion is necessary since values can include "include" directives which refer to other properties and include them in this property.
+// Recursively get all comma-separated values of the property key. Recursion is necessary since values can include
+// "include" directives which refer to other properties and include them in this property.
 func getPropertyValuesRecursively(properties *properties.Properties, key string) (values []string, err error) {
 	if properties == nil {
 		return values, errNilProperties
@@ -153,7 +154,7 @@ func getPropertyValuesRecursively(properties *properties.Properties, key string)
 			values[i] = strings.TrimSpace(value)
 		}
 	}
-	toBeRemoved := []int{} // Remember the include directives and remove them later
+	toBeRemoved := []int{} // Remember they include directives and remove them later
 	for i, value := range values {
 		if strings.HasPrefix(value, "include") {
 			toBeRemoved = append(toBeRemoved, i)
@@ -175,13 +176,13 @@ func getPropertyValuesRecursively(properties *properties.Properties, key string)
 
 // Parses the TLS Rules from the java.security file
 // Returns a joined list of errors which occurred during parsing of algorithms
-func extractTLSRules(securityProperties *properties.Properties) (restrictions []JavaSecurityAlgorithmRestriction, err error) {
+func extractTLSRules(securityProperties *properties.Properties) (restrictions []AlgorithmRestriction, err error) {
 	slog.Debug("Extracting TLS rules")
 
 	securityPropertiesKey := "jdk.tls.disabledAlgorithms"
 	algorithms, err := getPropertyValuesRecursively(securityProperties, securityPropertiesKey)
 
-	if go_errors.Is(err, errNilProperties) {
+	if goerrors.Is(err, errNilProperties) {
 		slog.Warn("Properties of javaSecurity object are nil. This should not happen. Continuing anyway.")
 	} else if err != nil {
 		return restrictions, err
@@ -242,7 +243,7 @@ func extractTLSRules(securityProperties *properties.Properties) (restrictions []
 				}
 			}
 
-			restrictions = append(restrictions, JavaSecurityAlgorithmRestriction{
+			restrictions = append(restrictions, AlgorithmRestriction{
 				name:            name,
 				keySize:         keySize,
 				keySizeOperator: keySizeOperator,
@@ -252,7 +253,7 @@ func extractTLSRules(securityProperties *properties.Properties) (restrictions []
 		slog.Debug("No disabled algorithms specified!", "key", securityPropertiesKey)
 	}
 
-	return restrictions, go_errors.Join(algorithmParsingErrors...)
+	return restrictions, goerrors.Join(algorithmParsingErrors...)
 }
 
 /*
@@ -261,7 +262,7 @@ container image related
 =======
 */
 
-const SECURITY_CMD_ARGUMENT = "-Djava.security.properties="
+const SecurityCmdArgument = "-Djava.security.properties="
 
 // Tries to get a config from the fs and checks the Config for potentially relevant information
 func checkConfig(securityProperties *properties.Properties, fs filesystem.Filesystem) (additionalSecurityProperties *properties.Properties, override bool, err error) {
@@ -275,7 +276,7 @@ func checkConfig(securityProperties *properties.Properties, fs filesystem.Filesy
 
 	additionalSecurityProperties, override, err = checkForAdditionalSecurityFilesCMDParameter(imageConfig, securityProperties, fs)
 
-	if go_errors.Is(err, errNilProperties) {
+	if goerrors.Is(err, errNilProperties) {
 		slog.Warn("Properties of javaSecurity object are nil. This should not happen. Continuing anyway.", "fs", fs.GetIdentifier())
 		return additionalSecurityProperties, override, nil
 	}
@@ -302,7 +303,7 @@ func checkForAdditionalSecurityFilesCMDParameter(config v1.Config, securityPrope
 	var ok bool
 
 	for _, command := range append(config.Cmd, config.Entrypoint...) {
-		value, override, ok = getJavaFlagValue(command, SECURITY_CMD_ARGUMENT)
+		value, override, ok = getJavaFlagValue(command, SecurityCmdArgument)
 
 		if ok {
 			slog.Debug("Found command that specifies new properties", "command", command)

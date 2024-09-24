@@ -17,7 +17,7 @@
 package filesystem
 
 import (
-	go_errors "errors"
+	goerrors "errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -25,12 +25,12 @@ import (
 	"os"
 	"path/filepath"
 
-	scanner_errors "github.com/IBM/cbomkit-theia/scanner/errors"
+	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-// A simple interface for a function to walk directories
+// SimpleWalkDirFunc A simple interface for a function to walk directories
 type SimpleWalkDirFunc func(path string) error
 
 // Filesystem interface is mainly used to interact with all types of possible data source (e.g. directories, docker images etc.); for images this represents a squashed layer
@@ -41,19 +41,19 @@ type Filesystem interface {
 	GetIdentifier() string                                  // Identifier for this specific filesystem; can be used for logging
 }
 
-// Simple plain filesystem that is constructed from the directory
+// PlainFilesystem Simple plain filesystem that is constructed from the directory
 type PlainFilesystem struct { // implements Filesystem
 	rootPath string
 }
 
-// Get a new PlainFilesystem from rootPath
+// NewPlainFilesystem Get a new PlainFilesystem from rootPath
 func NewPlainFilesystem(rootPath string) PlainFilesystem {
 	return PlainFilesystem{
 		rootPath: rootPath,
 	}
 }
 
-// Walk the whole PlainFilesystem using fn
+// WalkDir Walk the whole PlainFilesystem using fn
 func (plainFilesystem PlainFilesystem) WalkDir(fn SimpleWalkDirFunc) error {
 	return filepath.WalkDir(plainFilesystem.rootPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -72,7 +72,7 @@ func (plainFilesystem PlainFilesystem) WalkDir(fn SimpleWalkDirFunc) error {
 
 		err = fn(relativePath)
 
-		if go_errors.Is(err, scanner_errors.ErrParsingFailedAlthoughChecked) {
+		if goerrors.Is(err, scannererrors.ErrParsingFailedAlthoughChecked) {
 			slog.Warn(err.Error())
 			return nil
 		} else {
@@ -81,17 +81,17 @@ func (plainFilesystem PlainFilesystem) WalkDir(fn SimpleWalkDirFunc) error {
 	})
 }
 
-// Read a file from this filesystem; path should be relative to PlainFilesystem.rootPath
+// Open Read a file from this filesystem; path should be relative to PlainFilesystem.rootPath
 func (plainFilesystem PlainFilesystem) Open(path string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(plainFilesystem.rootPath, path))
 }
 
-// A plain directory does not have filesystem, so we return an empty object and false
+// GetConfig A plain directory does not have filesystem, so we return an empty object and false
 func (plainFilesystem PlainFilesystem) GetConfig() (config v1.Config, ok bool) {
 	return v1.Config{}, false
 }
 
-// Get a unique string for this PlainFilesystem; can be used for logging etc.
+// GetIdentifier Get a unique string for this PlainFilesystem; can be used for logging etc.
 func (plainFilesystem PlainFilesystem) GetIdentifier() string {
 	return fmt.Sprintf("Plain Filesystem (%v)", plainFilesystem.rootPath)
 }

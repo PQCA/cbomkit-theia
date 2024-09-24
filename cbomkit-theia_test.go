@@ -145,8 +145,8 @@ func TestScan(t *testing.T) {
 					return a.Name < b.Name
 				}),
 				cmpopts.SortSlices(func(a cdx.Component, b cdx.Component) bool {
-					aHash := hash.HashCDXComponentWithoutRefs(a)
-					bHash := hash.HashCDXComponentWithoutRefs(b)
+					aHash := hash.CdxComponentWithoutRefs(a)
+					bHash := hash.CdxComponentWithoutRefs(b)
 					return hex.EncodeToString(aHash[:]) < hex.EncodeToString(bHash[:])
 				}),
 				cmpopts.SortSlices(func(a cdx.EvidenceOccurrence, b cdx.EvidenceOccurrence) bool {

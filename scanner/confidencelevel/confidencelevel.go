@@ -22,9 +22,8 @@ import (
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-// A confidence level represents a level of confidence 
-//
-// Example: 
+// ConfidenceLevel A confidence level represents a level of confidence
+// Example:
 // A ConfidenceLevel could be used to represent the confidence that an algorithm is executable in a certain environment.
 type ConfidenceLevel struct {
 	count int
@@ -32,25 +31,25 @@ type ConfidenceLevel struct {
 	value int
 }
 
-// Modifiers for the ConfidenceLevel
-type ConfidenceLevelModifier int
+// Modifier ConfidenceLevelModifier Modifiers for the ConfidenceLevel
+type Modifier int
 
 // Constant value that can be used for the modification of a ConfidenceLevel
 const (
-	confidenceLevelMax                                             = 100
-	confidenceLevelDefault                                         = 50
-	confidenceLevelMin                                             = 0
-	ConfidenceLevelModifierPositiveExtreme ConfidenceLevelModifier = 50
-	ConfidenceLevelModifierPositiveHigh    ConfidenceLevelModifier = 30
-	ConfidenceLevelModifierPositiveMedium  ConfidenceLevelModifier = 15
-	ConfidenceLevelModifierPositiveLow     ConfidenceLevelModifier = 5
-	ConfidenceLevelModifierNegativeExtreme ConfidenceLevelModifier = -50
-	ConfidenceLevelModifierNegativeHigh    ConfidenceLevelModifier = -30
-	ConfidenceLevelModifierNegativeMedium  ConfidenceLevelModifier = -15
-	ConfidenceLevelModifierNegativeLow     ConfidenceLevelModifier = -5
+	confidenceLevelMax              = 100
+	confidenceLevelDefault          = 50
+	confidenceLevelMin              = 0
+	PositiveExtreme        Modifier = 50
+	PositiveHigh           Modifier = 30
+	PositiveMedium         Modifier = 15
+	PositiveLow            Modifier = 5
+	NegativeExtreme        Modifier = -50
+	NegativeHigh           Modifier = -30
+	NegativeMedium         Modifier = -15
+	NegativeLow            Modifier = -5
 )
 
-// Get a new ConfidenceLevel; default value is confidenceLevelDefault
+// New Get a new ConfidenceLevel; default value is confidenceLevelDefault
 func New() *ConfidenceLevel {
 	return &ConfidenceLevel{
 		count: 0,
@@ -59,12 +58,12 @@ func New() *ConfidenceLevel {
 	}
 }
 
-// Get the value of the ConfidenceLevel
+// GetValue Get the value of the ConfidenceLevel
 func (confidenceLevel *ConfidenceLevel) GetValue() int {
 	return confidenceLevel.value
 }
 
-// Generate a CycloneDX component property from this confidence
+// GetProperty Generate a CycloneDX component property from this confidence
 func (confidenceLevel *ConfidenceLevel) GetProperty() cdx.Property {
 	return cdx.Property{
 		Name:  "confidence_level",
@@ -73,7 +72,7 @@ func (confidenceLevel *ConfidenceLevel) GetProperty() cdx.Property {
 }
 
 // Modify the confidence level using one of the predefined ConfidenceLevelModifier values
-func (confidenceLevel *ConfidenceLevel) Modify(modifier ConfidenceLevelModifier) {
+func (confidenceLevel *ConfidenceLevel) Modify(modifier Modifier) {
 	confidenceLevel.value += int(modifier)
 
 	if confidenceLevel.value < confidenceLevelMin {

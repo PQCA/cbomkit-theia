@@ -48,12 +48,18 @@ func Serve() {
 	gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
 	r.Use(cors.Default()) // Allow all origins
-	r.SetTrustedProxies(nil)
+	err := r.SetTrustedProxies(nil)
+	if err != nil {
+		return
+	}
 	v1 := r.Group("/api/v1")
 	{
 		v1.POST("/image", imageGet)
 	}
-	r.Run(":8080") // listen and serve on 0.0.0.0:8080
+	err = r.Run(":8080") // listen and serve on 0.0.0.0:8080
+	if err != nil {
+		return
+	}
 }
 
 func imageGet(c *gin.Context) {
@@ -105,14 +111,14 @@ func imageGet(c *gin.Context) {
 		}
 
 		if err = container.Provide(func(input []plugins.PluginConstructor) ([]plugins.Plugin, error) {
-			plugins := make([]plugins.Plugin, len(input))
+			p := make([]plugins.Plugin, len(input))
 			for i, con := range input {
-				plugins[i], err = con()
+				p[i], err = con()
 				if err != nil {
-					return plugins, err
+					return p, err
 				}
 			}
-			return plugins, nil
+			return p, nil
 		}); err != nil {
 			returnError(c, err)
 			return

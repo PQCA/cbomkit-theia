@@ -28,7 +28,7 @@ import (
 	"github.com/xeipuuv/gojsonschema"
 )
 
-// Write bom to the file
+// WriteBOM Write bom to the file
 func WriteBOM(bom *cdx.BOM, writer io.Writer) error {
 	// Encode the BOM
 	err := cdx.NewBOMEncoder(writer, cdx.BOMFileFormatJSON).
@@ -40,7 +40,7 @@ func WriteBOM(bom *cdx.BOM, writer io.Writer) error {
 	return nil
 }
 
-// Parse and validate a CycloneDX BOM from path using the schema under schemaPath
+// ParseBOM Parse and validate a CycloneDX BOM from path using the schema under schemaPath
 func ParseBOM(bomReader io.Reader, schemaReader io.Reader) (*cdx.BOM, error) {
 	bomBytes, err := io.ReadAll(bomReader)
 	if err != nil {
@@ -62,7 +62,10 @@ func ParseBOM(bomReader io.Reader, schemaReader io.Reader) (*cdx.BOM, error) {
 	} else {
 		slog.Error("The BOM is not valid. see errors:")
 		for _, desc := range result.Errors() {
-			fmt.Fprintf(os.Stderr, "- %s\n", desc)
+			_, err = fmt.Fprintf(os.Stderr, "- %s\n", desc)
+			if err != nil {
+				slog.Error(err.Error())
+			}
 		}
 		return new(cdx.BOM), fmt.Errorf("provider: bom is not valid due to schema")
 	}

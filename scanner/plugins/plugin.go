@@ -30,7 +30,7 @@ type PluginType int
 	A list of possible plugin types
 
 Important: order these in the way you want to run the plugins;
-e.g. here the plugins are running in this order: PluginTypeAppend -> PluginTypeVerify -> PluginTypeOther
+e.g., here the plugins are running in this order: PluginTypeAppend -> PluginTypeVerify -> PluginTypeOther
 */
 const (
 	PluginTypeAppend PluginType = iota + 1
@@ -38,7 +38,7 @@ const (
 	PluginTypeOther
 )
 
-// Interface to be implemented by all plugins
+// Plugin Interface to be implemented by all plugins
 type Plugin interface {
 	GetName() string                                        // return a name for the plugin
 	GetExplanation() string                                 // explain the functionality of this plugin
@@ -46,7 +46,7 @@ type Plugin interface {
 	UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error // Update BOM using found files
 }
 
-// This PluginConstructor function should be exposed by all plugin packages
+// PluginConstructor should be exposed by all plugin packages
 type PluginConstructor func() (Plugin, error)
 
 func PluginSliceToString(plugins []Plugin) string {
