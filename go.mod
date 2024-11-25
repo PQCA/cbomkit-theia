@@ -18,7 +18,7 @@ require (
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	github.com/xeipuuv/gojsonschema v1.2.0
 	github.com/zricethezav/gitleaks/v8 v8.19.3
 	go.mozilla.org/pkcs7 v0.9.0
