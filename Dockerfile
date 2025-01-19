@@ -14,17 +14,37 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
-FROM golang:1.23.0-alpine3.20
+FROM golang:1.23.4-alpine3.21 as builder
 
 WORKDIR /app
 
+LABEL version="v1.0.0"
+
+# Install ca-certificates and git
+RUN sed -i 's/https:/http:/g' /etc/apk/repositories && apk update && apk add --no-cache ca-certificates git && update-ca-certificates
+
+# Set environment variables to bypass SSL verification
+ENV GIT_SSL_NO_VERIFY=true
+ENV GOPROXY=direct
+ENV GOINSECURE=*
+ENV GONOSUMDB=*
+
 COPY go.mod go.sum ./
 RUN go mod download
+RUN go mod tidy
 
 COPY . ./
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /cbomkit-theia
+RUN CGO_ENABLED=0 GOOS=linux go build -o ./cbomkit-theia
+
+FROM alpine:3.21.2
+
+WORKDIR /app
+
+COPY --from=builder /app/cbomkit-theia /app
+
+ENTRYPOINT ["/app/cbomkit-theia"]
 
 EXPOSE 8080
-ENTRYPOINT ["/cbomkit-theia"]
-CMD ["server"]
+
+CMD [ "server" ]
