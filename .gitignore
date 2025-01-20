@@ -1,4 +1,9 @@
-#
+### IntelliJ IDEA ###
+.idea
+*.iws
+*.iml
+*.ipr
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
