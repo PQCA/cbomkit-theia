@@ -219,7 +219,6 @@ func TestCMDArgumentAdditionalCMD(t *testing.T) {
 	defer tearDown(filesToDelete, image)
 
 	t.Run("Additional java.security files via CMD", func(t *testing.T) {
-
 		javaSecurity, err := newJavaSecurity(config, docker.GetSquashedFilesystem(image))
 		assert.NoError(t, err, "checkConfig failed")
 
