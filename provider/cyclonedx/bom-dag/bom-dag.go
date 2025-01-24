@@ -48,20 +48,20 @@ func NewBomDAG() BomDAG {
 	}
 }
 
-// BomDAGDependencyType Type defining the different types of dependencies that components can have in the BomDAG
-type BomDAGDependencyType string
+// DependencyType BomDAGDependencyType Type defining the different types of dependencies that components can have in the BomDAG
+type DependencyType string
 
 const (
-	DependencyTypeDependsOn                                            BomDAGDependencyType = "dependsOn"
-	DependencyTypeCertificatePropertiesSignatureAlgorithmRef           BomDAGDependencyType = "CertificatePropertiesSignatureAlgorithmRef"
-	DependencyTypeCertificatePropertiesSubjectPublicKeyRef             BomDAGDependencyType = "CertificatePropertiesSubjectPublicKeyRef"
-	DependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef          BomDAGDependencyType = "RelatedCryptoMaterialPropertiesAlgorithmRef"
-	DependencyTypeRelatedCryptoMaterialPropertiesSecuredByAlgorithmRef BomDAGDependencyType = "RelatedCryptoMaterialPropertiessecuredByAlgorithmRef"
-	DependencyTypeProtocolPropertiesCryptoRefArrayElement              BomDAGDependencyType = "protocolPropertiescryptoRefArray"
-	DependencyTypeOccurrence                                           BomDAGDependencyType = "occurrence"
+	DependencyTypeDependsOn                                            DependencyType = "dependsOn"
+	DependencyTypeCertificatePropertiesSignatureAlgorithmRef           DependencyType = "CertificatePropertiesSignatureAlgorithmRef"
+	DependencyTypeCertificatePropertiesSubjectPublicKeyRef             DependencyType = "CertificatePropertiesSubjectPublicKeyRef"
+	DependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef          DependencyType = "RelatedCryptoMaterialPropertiesAlgorithmRef"
+	DependencyTypeRelatedCryptoMaterialPropertiesSecuredByAlgorithmRef DependencyType = "RelatedCryptoMaterialPropertiessecuredByAlgorithmRef"
+	DependencyTypeProtocolPropertiesCryptoRefArrayElement              DependencyType = "protocolPropertiescryptoRefArray"
+	DependencyTypeOccurrence                                           DependencyType = "occurrence"
 )
 
-func EdgeDependencyType(dependencyType BomDAGDependencyType) func(*graph.EdgeProperties) {
+func EdgeDependencyType(dependencyType DependencyType) func(*graph.EdgeProperties) {
 	return func(e *graph.EdgeProperties) {
 		e.Attributes[string(dependencyType)] = ""
 		if _, ok := e.Attributes["label"]; !ok {

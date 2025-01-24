@@ -30,13 +30,14 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-// SimpleWalkDirFunc A simple interface for a function to walk directories
-type SimpleWalkDirFunc func(path string) error
+// FilePathAnalysisFunc A simple interface for a function to walk directories
+type FilePathAnalysisFunc func(path string) error
 
-// Filesystem interface is mainly used to interact with all types of possible data source (e.g. directories, docker images etc.); for images this represents a squashed layer
+// Filesystem interface is mainly used to interact with all types of possible data source
+// (e.g., directories, docker images etc.); for images this represents a squashed layer
 type Filesystem interface {
-	WalkDir(fn SimpleWalkDirFunc) (err error)               // Walk the full filesystem using the SimpleWalkDirFunc fn
-	Open(path string) (readCloser io.ReadCloser, err error) // Read a specific file with a path from root of the filesystem
+	WalkDir(fn FilePathAnalysisFunc) (err error)            // Walk the full filesystem using the FilePathAnalysisFunc fn
+	Open(path string) (readCloser io.ReadCloser, err error) // Read a specific file with a path from the root of the filesystem
 	GetConfig() (config v1.Config, ok bool)                 // Get a config of this filesystem in container image format (if it exists)
 	GetIdentifier() string                                  // Identifier for this specific filesystem; can be used for logging
 }
@@ -54,7 +55,7 @@ func NewPlainFilesystem(rootPath string) PlainFilesystem {
 }
 
 // WalkDir Walk the whole PlainFilesystem using fn
-func (plainFilesystem PlainFilesystem) WalkDir(fn SimpleWalkDirFunc) error {
+func (plainFilesystem PlainFilesystem) WalkDir(fn FilePathAnalysisFunc) error {
 	return filepath.WalkDir(plainFilesystem.rootPath, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
@@ -81,22 +82,22 @@ func (plainFilesystem PlainFilesystem) WalkDir(fn SimpleWalkDirFunc) error {
 	})
 }
 
-// Open Read a file from this filesystem; path should be relative to PlainFilesystem.rootPath
+// Open Read a file from this filesystem; a path should be relative to PlainFilesystem.rootPath
 func (plainFilesystem PlainFilesystem) Open(path string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(plainFilesystem.rootPath, path))
 }
 
-// GetConfig A plain directory does not have filesystem, so we return an empty object and false
+// GetConfig A plain directory does not have a filesystem, so we return an empty object and false
 func (plainFilesystem PlainFilesystem) GetConfig() (config v1.Config, ok bool) {
 	return v1.Config{}, false
 }
 
-// GetIdentifier Get a unique string for this PlainFilesystem; can be used for logging etc.
+// GetIdentifier Get a unique string for this PlainFilesystem; can be used for logging, etc.
 func (plainFilesystem PlainFilesystem) GetIdentifier() string {
 	return fmt.Sprintf("Plain Filesystem (%v)", plainFilesystem.rootPath)
 }
 
-func ReadAllClose(rc io.ReadCloser) ([]byte, error) {
+func ReadAllAndClose(rc io.ReadCloser) ([]byte, error) {
 	defer rc.Close()
 	b, err := io.ReadAll(rc)
 	return b, err

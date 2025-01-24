@@ -17,10 +17,9 @@
 package scanner
 
 import (
-	"errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
-	"log"
 	"log/slog"
 	"os"
 	"slices"
@@ -28,7 +27,7 @@ import (
 
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	plugin_package "github.com/IBM/cbomkit-theia/scanner/plugins"
+	pluginpackage "github.com/IBM/cbomkit-theia/scanner/plugins"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/certificates"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/javasecurity"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/secrets"
@@ -38,14 +37,12 @@ import (
 	"go.uber.org/dig"
 )
 
-type ScannerParameterStruct struct {
+type ParameterStruct struct {
 	dig.In
-
-	Fs            filesystem.Filesystem
-	Target        io.Writer
-	BomFilePath   string                  `name:"bomFilePath"`
-	BomSchemaPath string                  `name:"bomSchemaPath"`
-	Plugins       []plugin_package.Plugin `group:"plugins"`
+	Fs          filesystem.Filesystem
+	Target      io.Writer
+	BomFilePath string                 `name:"bomFilePath"`
+	Plugins     []pluginpackage.Plugin `group:"plugins"`
 }
 
 func GetAllPluginNames() []string {
@@ -56,20 +53,19 @@ func GetAllPluginNames() []string {
 	return out
 }
 
-func GetAllPluginConstructors() map[string]plugin_package.PluginConstructor {
-	return map[string]plugin_package.PluginConstructor{
+func GetAllPluginConstructors() map[string]pluginpackage.PluginConstructor {
+	return map[string]pluginpackage.PluginConstructor{
 		"certificates": certificates.NewCertificatePlugin,
 		"javasecurity": javasecurity.NewJavaSecurityPlugin,
 		"secrets":      secrets.NewSecretsPlugin,
 	}
 }
 
-func GetPluginConstructorsFromNames(names []string) ([]plugin_package.PluginConstructor, error) {
-	pluginConstructors := make([]plugin_package.PluginConstructor, 0, len(names))
+func GetPluginConstructorsFromNames(names []string) ([]pluginpackage.PluginConstructor, error) {
+	pluginConstructors := make([]pluginpackage.PluginConstructor, 0, len(names))
 	for _, name := range names {
 		constructor, ok := GetAllPluginConstructors()[name]
 		if !ok {
-			// Error
 			return pluginConstructors, fmt.Errorf("%v is not a valid plugin name", name)
 		} else {
 			pluginConstructors = append(pluginConstructors, constructor)
@@ -78,24 +74,21 @@ func GetPluginConstructorsFromNames(names []string) ([]plugin_package.PluginCons
 	return pluginConstructors, nil
 }
 
-// High-level function to do most heavy lifting for scanning a filesystem with a BOM. Output is written to target.
-func ReadFilesAndRunScan(params ScannerParameterStruct) error {
+// ReadFilesAndRunScan High-level function to do most heavy lifting for scanning a filesystem with a BOM.
+func ReadFilesAndRunScan(params ParameterStruct) error {
 	var bom *cdx.BOM
 	if params.BomFilePath != "" {
-		var err error
-		bomReader, err1 := os.Open(params.BomFilePath)
-		schemaReader, err2 := os.Open(params.BomSchemaPath)
-		if errors.Join(err1, err2) != nil {
-			return errors.Join(err1, err2)
+		bomReader, err := os.Open(params.BomFilePath)
+		if err != nil {
+			return err
 		}
-		bom, err = cyclonedx.ParseBOM(bomReader, schemaReader)
+		bom, err = cyclonedx.ParseBOM(bomReader)
 		if err != nil {
 			return err
 		}
 	} else {
 		bom = NewBOMWithMetadata()
 	}
-
 	return RunScan(bom, params.Plugins, params.Fs, params.Target)
 }
 
@@ -108,41 +101,37 @@ func NewBOMWithMetadata() *cdx.BOM {
 	return bom
 }
 
-func RunScan(bom *cdx.BOM, plugins []plugin_package.Plugin, fs filesystem.Filesystem, target io.Writer) error {
-	scanner := newScanner(plugins)
-	newBom, err := scanner.scan(*bom, fs)
+func RunScan(bom *cdx.BOM, plugins []pluginpackage.Plugin, fs filesystem.Filesystem, target io.Writer) error {
+	scan := newScanner(plugins)
+	newBom, err := scan.scan(bom, fs)
 	if err != nil {
 		return err
 	}
-
-	scanner.addMetadata(&newBom)
-
-	log.Default().Println("FINISHED SCANNING")
-
-	return cyclonedx.WriteBOM(&newBom, target)
+	scan.addMetadata(newBom)
+	return cyclonedx.WriteBOM(newBom, target)
 }
 
 // scanner is used internally to represent a single scanner with several plugins (e.g. java.security plugin) scanning a single filesystem (e.g. a docker image layer)
 type scanner struct {
-	configPlugins []plugin_package.Plugin
+	configPlugins []pluginpackage.Plugin
 }
 
 // Scan a single BOM using all plugins
-func (scanner *scanner) scan(bom cdx.BOM, fs filesystem.Filesystem) (cdx.BOM, error) {
+func (scanner *scanner) scan(bom *cdx.BOM, fs filesystem.Filesystem) (*cdx.BOM, error) {
 	var err error
 	if bom.Components == nil {
-		slog.Info("BOM does not have any components, this scan will only add components", "bom-serial-number", bom.SerialNumber)
+		log.Warn("BOM does not have any components, this scan will only add components")
 		bom.Components = new([]cdx.Component)
 	}
 
 	// Sort the plugins based on the plugin type
-	slices.SortFunc(scanner.configPlugins, func(a plugin_package.Plugin, b plugin_package.Plugin) int {
+	slices.SortFunc(scanner.configPlugins, func(a pluginpackage.Plugin, b pluginpackage.Plugin) int {
 		return int(a.GetType()) - int(b.GetType())
 	})
 
 	for _, plugin := range scanner.configPlugins {
-		slog.Info("Running plugin", "plugin", plugin.GetName())
-		err = plugin.UpdateBOM(fs, &bom)
+		log.Info("=> Running ", plugin.GetName())
+		err = plugin.UpdateBOM(fs, bom)
 		if err != nil {
 			return bom, fmt.Errorf("scanner: plugin (%v) failed to updated components of bom; %w", plugin.GetName(), err)
 		}
@@ -151,8 +140,8 @@ func (scanner *scanner) scan(bom cdx.BOM, fs filesystem.Filesystem) (cdx.BOM, er
 }
 
 // Create a new scanner object for the specific filesystem
-func newScanner(plugins []plugin_package.Plugin) scanner {
-	slog.Debug("Initializing a new scanner", "plugins", plugin_package.PluginSliceToString(plugins))
+func newScanner(plugins []pluginpackage.Plugin) scanner {
+	slog.Debug("Initializing a new scanner", "plugins", pluginpackage.PluginSliceToString(plugins))
 	return scanner{
 		configPlugins: plugins,
 	}
@@ -180,10 +169,10 @@ func (scanner *scanner) addMetadata(bom *cdx.BOM) {
 
 	*bom.Metadata.Tools.Services = append(*bom.Metadata.Tools.Services, cdx.Service{
 		Provider: &cdx.OrganizationalEntity{
-			Name: "IBM Research",
+			Name: "IBM",
 		},
 		Name:     "CBOMkit-theia",
-		Version:  "0.9",
+		Version:  "1.0",
 		Services: &pluginServices,
 	})
 }

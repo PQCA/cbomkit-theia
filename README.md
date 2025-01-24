@@ -36,7 +36,7 @@ Supported image/filesystem sources:
 - local OCI image as directory
 - local OCI image as TAR archive
 - OCI image from OCI registry
-- docker image from dockerhub registry
+- docker image
 - image from singularity
 
 Supported BOM formats (input & output):
@@ -44,8 +44,7 @@ Supported BOM formats (input & output):
 
 Examples:
 cbomkit-theia dir my/cool/directory
-cbomkit-theia image get nginx
-cbomkit-theia image build my/Dockerfile
+cbomkit-theia image nginx
 
 Plugin Explanations:
 > "certificates": Certificate File Plugin
@@ -66,7 +65,6 @@ Available Commands:
   dir         Analyze cryptographic assets in a directory
   help        Help about any command
   image       Analyze cryptographic assets in a container image
-  server      Start a server (port: 8080, see openapi.yaml)
 
 Flags:
   -b, --bom string        BOM file to be verified and enriched
@@ -82,31 +80,8 @@ Use "cbomkit-theia [command] --help" for more information about a command.
 
 - Go 
   - Version: `1.23` or up
-- Docker Daemon (if using `cbomkit-theia image build`)
-  - Recommended: Set the `DOCKER_HOST` environment variable (default: `unix:///var/run/docker.sock`) 
-- Internet Connection: CBOMkit-theia builds and pulls docker images during runtime
-
-Tested with the following Docker Engine Specs:
-```text
-Server: Docker Engine - Community
- Engine:
-  Version:          27.1.1
-  API version:      1.46 (minimum version 1.24)
-  Go version:       go1.21.12
-  Git commit:       cc13f95
-  Built:            Tue Jul 23 20:00:07 2024
-  OS/Arch:          linux/arm64
-  Experimental:     false
- containerd:
-  Version:          1.7.19
-  GitCommit:        2bf793ef6dc9a18e00cb12efb64355c2c9d5eb41
- runc:
-  Version:          1.7.19
-  GitCommit:        v1.1.13-0-g58aa920
- docker-init:
-  Version:          0.19.0
-  GitCommit:        de40ad0
-```
+- Docker (or similar container runtimes)
+  - Recommended: Set the `DOCKER_HOST` environment variable (default: `unix:///var/run/docker.sock`)
 
 ## Running
 
@@ -116,8 +91,6 @@ Server: Docker Engine - Community
 docker build -t cbomkit-theia . 
 # CLI
 docker run cbomkit-theia [command] > enriched_CBOM.json
-# Server
-docker run -d -p 8080:8080 cbomkit-theia
 ```
 
 ### Compiled
@@ -126,13 +99,6 @@ docker run -d -p 8080:8080 cbomkit-theia
 go mod download
 go build
 ./cbomkit-theia [command] > enriched_CBOM.json
-```
-
-### Interpreted
-
-```shell
-go mod download
-go run ./cbomkit-theia.go [command] > enriched_CBOM.json
 ```
 
 ## Development
@@ -144,8 +110,8 @@ go run ./cbomkit-theia.go [command] > enriched_CBOM.json
     - Based on the results, a confidence level (`confidence_level`) is assigned to the restricted (or not restricted) algorithms in the CBOM
       - A higher confidence level means that component is more likely to be executable
   - X.509 Certificate Plugin:
-    - Searches the filesystem for X.509 certificates
-    - Adds the certificates to the CBOM, as well as signature algorithms, public keys and public key algorithms
+    - Search the filesystem for X.509 certificates
+    - Add the certificates to the CBOM, as well as signature algorithms, public keys and public key algorithms
   - Secret Plugin:
     - Leverages [gitleaks](https://github.com/gitleaks/gitleaks) to find secrets and keys in the data source
     - Adds the secrets and keys to the CBOM

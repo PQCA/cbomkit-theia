@@ -19,6 +19,7 @@ package certificates
 import (
 	"encoding/pem"
 	"errors"
+	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -27,12 +28,10 @@ import (
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem-utility"
+	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	"go.mozilla.org/pkcs7"
-
-	bomdag "github.com/IBM/cbomkit-theia/scanner/bom-dag"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
@@ -77,7 +76,7 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 				if err != nil {
 					return err
 				}
-				raw, err := filesystem.ReadAllClose(readCloser)
+				raw, err := filesystem.ReadAllAndClose(readCloser)
 				if err != nil {
 					return err
 				}
@@ -91,7 +90,7 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 				if err != nil {
 					return err
 				}
-				raw, err := filesystem.ReadAllClose(readCloser)
+				raw, err := filesystem.ReadAllAndClose(readCloser)
 				if err != nil {
 					return err
 				}

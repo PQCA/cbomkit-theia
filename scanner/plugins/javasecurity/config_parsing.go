@@ -19,13 +19,13 @@ package javasecurity
 import (
 	goerrors "errors"
 	"fmt"
+	advancedcomponentslice "github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	"log/slog"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	advancedcomponentslice "github.com/IBM/cbomkit-theia/scanner/componentwithconfidenceslice"
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -183,7 +183,7 @@ func extractTLSRules(securityProperties *properties.Properties) (restrictions []
 	algorithms, err := getPropertyValuesRecursively(securityProperties, securityPropertiesKey)
 
 	if goerrors.Is(err, errNilProperties) {
-		slog.Warn("Properties of javaSecurity object are nil. This should not happen. Continuing anyway.")
+		slog.Warn("Properties of javaSecurity object are nil.")
 	} else if err != nil {
 		return restrictions, err
 	}
@@ -317,7 +317,7 @@ func checkForAdditionalSecurityFilesCMDParameter(config v1.Config, securityPrope
 					return additionalSecurityProperties, override, err
 				}
 			}
-			content, err := filesystem.ReadAllClose(readCloser)
+			content, err := filesystem.ReadAllAndClose(readCloser)
 			if err != nil {
 				slog.Warn("failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
 				return additionalSecurityProperties, override, nil

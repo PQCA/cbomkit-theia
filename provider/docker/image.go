@@ -21,6 +21,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/docker/docker/api/types"
+	"github.com/docker/docker/pkg/archive"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"log/slog"
 	"os"
@@ -29,18 +32,13 @@ import (
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 
-	"github.com/anchore/go-logger"
-	"github.com/anchore/go-logger/adapter/logrus"
 	"github.com/anchore/stereoscope"
 	"github.com/anchore/stereoscope/pkg/image"
-	"github.com/docker/docker/api/types"
-	docker_api_types_image "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
-	"github.com/docker/docker/pkg/archive"
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-// Represents an active image (e.g. with an active client connection)
+// ActiveImage Represents an active image (e.g. with an active client connection)
 type ActiveImage struct {
 	*image.Image
 	id     string
@@ -49,19 +47,12 @@ type ActiveImage struct {
 
 // TearDown Defer to this function to destroy the ActiveImage after use
 func (image ActiveImage) TearDown() {
-	slog.Info("Removing Image", "id", image.id)
-
-	ctx, cancel := context.WithCancel(context.Background())
+	_, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	err := image.Cleanup()
 	if err != nil {
-		panic(err)
-	}
-
-	_, err = image.client.ImageRemove(ctx, image.id, docker_api_types_image.RemoveOptions{})
-	if err != nil {
-		slog.Info("Could not remove temporary docker image", "err", err)
+		log.Error(err)
 	}
 }
 
@@ -70,9 +61,38 @@ func (image ActiveImage) GetConfig() (config v1.Config, ok bool) {
 	return image.Metadata.Config.Config, true
 }
 
-// BuildNewImage Build new image from a dockerfile;
+// GetImage Parses a DockerImage from an identifier, possibly pulling it from a registry;
 // Caller is responsible to call image.TearDown() after usage
-func BuildNewImage(dockerfilePath string) (image ActiveImage, err error) {
+func GetImage(name string) (image ActiveImage, err error) {
+	slog.Info("Getting prebuilt image", "image", name)
+	// context for network requests
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	stereoscopeImage, err := stereoscope.GetImage(ctx, name)
+	if err != nil {
+		return ActiveImage{}, err
+	}
+
+	imageID := getImgIDWithoutDigest(stereoscopeImage.Metadata.ID)
+
+	slog.Info("Successfully acquired image", "image", name, "id", imageID)
+
+	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
+	if err != nil {
+		return ActiveImage{}, err
+	}
+
+	return ActiveImage{
+		stereoscopeImage,
+		imageID,
+		cli,
+	}, err
+}
+
+// BuildImage Build new image from a dockerfile;
+// Caller is responsible to call image.TearDown() after usage
+func BuildImage(dockerfilePath string) (image ActiveImage, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -128,44 +148,6 @@ func BuildNewImage(dockerfilePath string) (image ActiveImage, err error) {
 		if strings.Contains(err.Error(), "unable to save image tar: Error response from daemon: empty export - not implemented") {
 			return ActiveImage{}, fmt.Errorf("provider: failed to export docker image since it is empty, this is a weird docker implementation and you should not pass empty images.\nFull Trace:\n%w", err)
 		}
-		return ActiveImage{}, err
-	}
-
-	return ActiveImage{
-		stereoscopeImage,
-		imageID,
-		cli,
-	}, err
-}
-
-// GetPrebuiltImage Parses a DockerImage from an identifier, possibly pulling it from a registry;
-// Caller is responsible to call image.TearDown() after usage
-func GetPrebuiltImage(name string) (image ActiveImage, err error) {
-	slog.Info("Getting prebuilt image", "image", name)
-	// context for network requests
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	lctx, err := logrus.New(logrus.Config{
-		EnableConsole: true,
-		Level:         logger.TraceLevel,
-	})
-	if err != nil {
-		return ActiveImage{}, err
-	}
-	stereoscope.SetLogger(lctx)
-
-	stereoscopeImage, err := stereoscope.GetImage(ctx, name)
-	if err != nil {
-		return ActiveImage{}, err
-	}
-
-	imageID := getImgIDWithoutDigest(stereoscopeImage.Metadata.ID)
-
-	slog.Info("Successfully acquired image", "image", name, "id", imageID)
-
-	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
-	if err != nil {
 		return ActiveImage{}, err
 	}
 

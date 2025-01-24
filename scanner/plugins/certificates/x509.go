@@ -20,11 +20,11 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
+	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
 	"path/filepath"
 	"time"
 
-	bomdag "github.com/IBM/cbomkit-theia/scanner/bom-dag"
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem-utility"
+	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
 
 	"github.com/google/uuid"
 

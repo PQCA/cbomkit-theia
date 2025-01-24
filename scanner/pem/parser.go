@@ -14,7 +14,7 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package pemutility
+package pem
 
 import (
 	"crypto/dsa"

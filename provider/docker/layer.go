@@ -19,11 +19,9 @@ package docker
 import (
 	"errors"
 	"fmt"
-	"io"
-	"log/slog"
-
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
+	"io"
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/filetree/filenode"
@@ -39,17 +37,16 @@ type Layer struct { // implements Filesystem
 }
 
 // WalkDir Walk all files in the squashed layer using fn
-func (layer Layer) WalkDir(fn filesystem.SimpleWalkDirFunc) error {
+func (layer Layer) WalkDir(fn filesystem.FilePathAnalysisFunc) error {
 	return layer.SquashedTree.Walk(
 		func(path file.Path, f filenode.FileNode) error {
 			if f.FileType == file.TypeDirectory {
 				return nil
 			}
-
+			
 			err := fn(string(path))
 
 			if errors.Is(err, scannererrors.ErrParsingFailedAlthoughChecked) {
-				slog.Warn(err.Error())
 				return nil
 			} else {
 				return err
@@ -63,7 +60,6 @@ func (layer Layer) Open(path string) (io.ReadCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return readCloser, err
 }
 
@@ -72,7 +68,7 @@ func (layer Layer) GetConfig() (config v1.Config, ok bool) {
 	return layer.image.GetConfig()
 }
 
-// GetIdentifier Get a unique string for this layer in the image; can be used for logging etc.
+// GetIdentifier Get a unique string for this layer in the image; can be used for logging, etc.
 func (layer Layer) GetIdentifier() string {
 	return fmt.Sprintf("Docker Image Layer (id:%v, layer:%v)", layer.image.id, layer.index)
 }

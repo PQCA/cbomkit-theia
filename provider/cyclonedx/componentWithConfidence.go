@@ -14,18 +14,17 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package componentwithconfidenceslice
+package cyclonedx
 
 import (
-	"github.com/IBM/cbomkit-theia/scanner/confidencelevel"
-
 	cdx "github.com/CycloneDX/cyclonedx-go"
+	"github.com/IBM/cbomkit-theia/scanner/confidenceLevel"
 )
 
 // ComponentWithConfidence CycloneDX component bundled with according ConfidenceLevel
 type ComponentWithConfidence struct {
 	*cdx.Component
-	Confidence           *confidencelevel.ConfidenceLevel
+	Confidence           *confidenceLevel.ConfidenceLevel
 	printConfidenceLevel bool
 }
 
@@ -50,7 +49,7 @@ func FromComponentSlice(slice []cdx.Component) *ComponentWithConfidenceSlice {
 	for i, comp := range slice {
 		advancedComponentSlice.components = append(advancedComponentSlice.components, ComponentWithConfidence{
 			Component:            &comp,
-			Confidence:           confidencelevel.New(),
+			Confidence:           confidenceLevel.New(),
 			printConfidenceLevel: false,
 		})
 

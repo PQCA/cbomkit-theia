@@ -18,21 +18,10 @@ package main
 
 import (
 	"github.com/IBM/cbomkit-theia/cmd"
-	"log/slog"
-	"os"
 )
 
 // Function used to set logging and start cobra
 func main() {
-	// Setup logging
-	logHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level:     slog.LevelInfo,
-		AddSource: false,
-	})
-	logger := slog.New(logHandler)
-	logger.Handler().WithAttrs([]slog.Attr{})
-	slog.SetDefault(logger)
-
 	// Run
 	cmd.Execute()
 }

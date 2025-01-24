@@ -19,7 +19,6 @@ package main
 import (
 	"bytes"
 	"io"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -34,15 +33,13 @@ import (
 var testfileFolder string = "./testdata"
 var outputExtension string = "/out/bom.json"
 var bomFolderExtension string = "/in/bom.json"
-var dockerfileExtension string = "/image/Dockerfile"
 var dirExtension string = "/dir"
 
 type testType int
 
 const (
 	testTypeDir testType = iota + 1
-	testTypeImageBuild
-	testTypeImageGet
+	testTypeImage
 )
 
 var tests = []struct {
@@ -51,11 +48,7 @@ var tests = []struct {
 	in             string
 	err            bool
 }{
-	{testTypeImageBuild, "", "/0_empty", false},
-	{testTypeImageGet, "busybox", "/0_empty", false},
-	//{testTypeImageBuild, "", "/1_exclude_single_algorithm", false},
-	//{testTypeImageBuild, "", "/2_tomcat", false},
-	{testTypeImageBuild, "", "/3_certificates", false},
+	{testTypeImage, "busybox", "/0_empty", false},
 	{testTypeDir, "", "/4_unknown_keySize", false},
 	{testTypeDir, "", "/5_single_certificate", false},
 	{testTypeDir, "", "/6_malformed_java_security", false},
@@ -64,8 +57,6 @@ var tests = []struct {
 }
 
 func TestScan(t *testing.T) {
-	schemaPath := filepath.Join("provider", "cyclonedx", "bom-1.6.schema.json")
-
 	for _, test := range tests {
 		t.Run(test.in+", BOM: "+test.in, func(t *testing.T) {
 			tempTarget := new(bytes.Buffer)
@@ -77,12 +68,6 @@ func TestScan(t *testing.T) {
 			if err := container.Provide(func() string {
 				return testfileFolder + test.in + bomFolderExtension
 			}, dig.Name("bomFilePath")); err != nil {
-				panic(err)
-			}
-
-			if err := container.Provide(func() string {
-				return schemaPath
-			}, dig.Name("bomSchemaPath")); err != nil {
 				panic(err)
 			}
 
@@ -99,18 +84,8 @@ func TestScan(t *testing.T) {
 			}
 
 			switch test.testType {
-			case testTypeImageBuild:
-				dockerfilePath := filepath.Join(testfileFolder, test.in, dockerfileExtension)
-				image, err := docker.BuildNewImage(dockerfilePath)
-				assert.NoError(t, err)
-				defer image.TearDown()
-				err = container.Provide(func() filesystem.Filesystem {
-					return docker.GetSquashedFilesystem(image)
-				})
-				assert.NoError(t, err)
-				runErr = container.Invoke(scanner.ReadFilesAndRunScan)
-			case testTypeImageGet:
-				image, err := docker.GetPrebuiltImage(test.additionalInfo)
+			case testTypeImage:
+				image, err := docker.GetImage(test.additionalInfo)
 				assert.NoError(t, err)
 				defer image.TearDown()
 				err = container.Provide(func() filesystem.Filesystem {
@@ -132,9 +107,7 @@ func TestScan(t *testing.T) {
 				assert.NoError(t, runErr, "scan did fail although it should not")
 			}
 
-			schemaReader, _ := os.Open(schemaPath)
-			schemaReader.Seek(0, 0)
-			bomCurrent, err := cyclonedx.ParseBOM(tempTarget, schemaReader)
+			bomCurrent, err := cyclonedx.ParseBOM(tempTarget)
 			assert.NoError(t, err)
 
 			// only check that bom is not empty

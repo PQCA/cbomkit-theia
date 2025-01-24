@@ -17,12 +17,12 @@
 package secrets
 
 import (
-	"log/slog"
+	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
+	log "github.com/sirupsen/logrus"
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	bomdag "github.com/IBM/cbomkit-theia/scanner/bom-dag"
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem-utility"
+	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -61,32 +61,27 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		return err
 	}
 
-	findings := make([]findingWithMetadata, 0)
-
 	// Detect findings
-	err = fs.WalkDir(func(path string) error {
+	findings := make([]findingWithMetadata, 0)
+	if err = fs.WalkDir(func(path string) error {
 		readCloser, err := fs.Open(path)
 		if err != nil {
-			return err
+			return nil // skip and continue
 		}
 
 		mime, err := mimetype.DetectReader(readCloser)
 		if err != nil {
-			slog.Warn("Error reading file; continuing", "path", path)
-			return nil
+			return nil // skip and continue
 		}
 
 		if !(strings.HasPrefix(mime.String(), "text") || mime.Parent() != nil && strings.HasPrefix(mime.Parent().String(), "text")) {
-			return nil // Skip
+			return nil // skip and continue
 		}
 
-		readCloser, err = fs.Open(path)
+		content, err := filesystem.ReadAllAndClose(readCloser)
 		if err != nil {
-			return err
-		}
-		content, err := filesystem.ReadAllClose(readCloser)
-		if err != nil {
-			return err
+			log.Warn("Unable to read file ", path)
+			return nil
 		}
 
 		fragment := detect.Fragment{
@@ -100,37 +95,40 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 				mime:    strings.Split(mime.String(), ";")[0],
 				raw:     content,
 			})
+			log.Info(finding.Description, " detected")
 		}
-
 		return nil
-	})
-
-	if err != nil {
+	}); err != nil {
+		log.Error("Error while trying to scan for secrets: ", err)
 		return err
 	}
 
-	bomDag := bomdag.NewBomDAG()
-
-	components := make([]cdx.Component, 0)
+	if len(findings) == 0 {
+		log.Info("No secrets found.")
+		return nil
+	}
 
 	// Create CDX Components
+	components := make([]cdx.Component, 0)
 	for _, finding := range findings {
 		currentComponents, err := finding.getComponents()
 		if err != nil {
-			return err
+			log.Warn("Could transfer finding to cyclondx component: ", err)
+			continue
 		}
 		components = append(components, currentComponents...)
 	}
 
 	// Create DAG
+	bomDag := bomdag.NewBomDAG()
 	for _, comp := range components {
 		hash, err := bomDag.AddCDXComponent(comp)
 		if err != nil {
-			return err
+			continue
 		}
 		err = bomDag.AddEdge(bomDag.Root, hash)
 		if err != nil {
-			slog.Error(err.Error())
+			continue
 		}
 	}
 
@@ -142,7 +140,6 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 
 	// Write to real bom
 	*bom.Components = append(*bom.Components, secretComponents...)
-
 	return nil
 }
 
@@ -180,7 +177,6 @@ func (finding findingWithMetadata) getComponents() ([]cdx.Component, error) {
 					},
 				}
 			}
-
 			return currentComponents, nil
 		}
 	}

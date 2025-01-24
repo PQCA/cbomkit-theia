@@ -18,14 +18,10 @@ package cyclonedx
 
 import (
 	"bytes"
-	"fmt"
 	"io"
-	"os"
-
 	"log/slog"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
-	"github.com/xeipuuv/gojsonschema"
 )
 
 // WriteBOM Write bom to the file
@@ -40,36 +36,12 @@ func WriteBOM(bom *cdx.BOM, writer io.Writer) error {
 	return nil
 }
 
-// ParseBOM Parse and validate a CycloneDX BOM from path using the schema under schemaPath
-func ParseBOM(bomReader io.Reader, schemaReader io.Reader) (*cdx.BOM, error) {
+// ParseBOM Parse a CycloneDX BOM from a path using the schema under schemaPath
+func ParseBOM(bomReader io.Reader) (*cdx.BOM, error) {
 	bomBytes, err := io.ReadAll(bomReader)
 	if err != nil {
 		return new(cdx.BOM), err
 	}
-
-	// JSON Validation via Schema
-	schema, _ := io.ReadAll(schemaReader)
-	schemaLoader := gojsonschema.NewBytesLoader(schema) // Tried it with NewReaderLoader(schemaReader) but this failed for whatever reason
-	documentLoader := gojsonschema.NewBytesLoader(bomBytes)
-
-	result, err := gojsonschema.Validate(schemaLoader, documentLoader)
-	if err != nil {
-		return new(cdx.BOM), fmt.Errorf("json schema validator failed: %w", err)
-	}
-
-	if result.Valid() {
-		slog.Info("Provided BOM is valid.")
-	} else {
-		slog.Error("The BOM is not valid. see errors:")
-		for _, desc := range result.Errors() {
-			_, err = fmt.Fprintf(os.Stderr, "- %s\n", desc)
-			if err != nil {
-				slog.Error(err.Error())
-			}
-		}
-		return new(cdx.BOM), fmt.Errorf("provider: bom is not valid due to schema")
-	}
-
 	// Decode BOM from JSON
 	slog.Debug("Decoding BOM from JSON to GO object")
 	bom := new(cdx.BOM)
@@ -78,6 +50,5 @@ func ParseBOM(bomReader io.Reader, schemaReader io.Reader) (*cdx.BOM, error) {
 	if err != nil {
 		return new(cdx.BOM), err
 	}
-
 	return bom, nil
 }

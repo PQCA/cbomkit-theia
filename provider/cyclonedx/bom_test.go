@@ -32,15 +32,12 @@ var tests = []struct {
 	{testfileFolder + "/protocol.json", false},
 }
 
-var schemaPath string = "./bom-1.6.schema.json"
-
 // Test if the BOMs are parsed as expected
 func TestParseBOM(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.in, func(t *testing.T) {
 			inReader, _ := os.Open(test.in)
-			schemaReader, _ := os.Open(schemaPath)
-			_, err := ParseBOM(inReader, schemaReader)
+			_, err := ParseBOM(inReader)
 			if (err != nil) != test.err {
 				t.Fatalf("Failed to parse %v", test.in)
 			}

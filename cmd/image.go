@@ -14,17 +14,16 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package image
+package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 
 	"github.com/IBM/cbomkit-theia/provider/docker"
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	"github.com/IBM/cbomkit-theia/scanner"
-	"github.com/IBM/cbomkit-theia/scanner/plugins"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/dig"
@@ -32,78 +31,86 @@ import (
 
 var dockerHost string
 
-var ImageCmd = &cobra.Command{
+var imageCommand = &cobra.Command{
 	Use:   "image",
 	Short: "Analyze cryptographic assets in a container image",
 	Long: `Analyze cryptographic assets in a container image
 
 Supported image sources:
-- local application with dockerfile (ready to be build)
 - local docker image from docker daemon
 - local docker image as TAR archive
 - local OCI image as directory
 - local OCI image as TAR archive
 - OCI image from OCI registry
 - docker image from dockerhub registry
-- image from singularity`,
+- image from singularity
+
+Examples:
+cbomkit-theia image nginx`,
 	PersistentPreRun: func(cmd *cobra.Command, args []string) {
-		os.Setenv("DOCKER_HOST", viper.GetString("docker_host"))
+		value := viper.GetString("docker_host")
+		err := os.Setenv("DOCKER_HOST", value)
+		if err != nil {
+			log.Error("Failed to set environment variable 'DOCKER_HOST'.")
+			return
+		}
+	},
+	Args: cobra.ExactArgs(1),
+	Run: func(cmd *cobra.Command, args []string) {
+		image, err := docker.GetImage(args[0])
+		if err != nil {
+			log.Error("Could not fetch image: ", err)
+			return
+		}
+		if err := prepareImageAndRun(image); err != nil {
+			log.Error("Could not scan image: ", err)
+		}
 	},
 }
 
-// This function basically extract all information that is still missing, such as the BOM and the schema and runs a scan on the images top layer
-func prepareImageAndRun(image docker.ActiveImage, err error) {
-	if err != nil {
-		panic(err)
-	}
+// This function basically extracts all information that is still missing,
+// such as the BOM and the schema and runs a scan on the image top layer
+func prepareImageAndRun(image docker.ActiveImage) error {
 	defer image.TearDown()
-
 	container := dig.New()
 
-	if err = container.Provide(func() filesystem.Filesystem {
+	if err := container.Provide(func() filesystem.Filesystem {
 		return docker.GetSquashedFilesystem(image)
 	}); err != nil {
-		panic(err)
+		return err
 	}
 
-	if err = container.Provide(func() string {
+	if err := container.Provide(func() string {
 		return viper.GetString("bom")
 	}, dig.Name("bomFilePath")); err != nil {
-		panic(err)
+		return err
 	}
 
-	if err = container.Provide(func() string {
-		return viper.GetString("schema")
-	}, dig.Name("bomSchemaPath")); err != nil {
-		panic(err)
-	}
-
-	if err = container.Provide(func() io.Writer {
+	if err := container.Provide(func() io.Writer {
 		return os.Stdout
 	}); err != nil {
-		panic(err)
+		return err
 	}
 
-	pluginConstructors, ok := viper.Get("pluginConstructors").([]plugins.PluginConstructor)
-
-	if !ok {
-		panic("Could not get pluginConstructors from Viper! This should not happen.")
+	pluginConstructors, err := scanner.GetPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
+	if err != nil {
+		return err
 	}
-
 	for _, pluginConstructor := range pluginConstructors {
-		if err = container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
-			panic(err)
+		if err := container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
+			return err
 		}
 	}
 
-	if err = container.Invoke(scanner.ReadFilesAndRunScan); err != nil {
-		panic(err)
+	if err := container.Invoke(scanner.ReadFilesAndRunScan); err != nil {
+		return err
 	}
+
+	return nil
 }
 
 func init() {
-	ImageCmd.AddCommand(buildCmd)
-	ImageCmd.AddCommand(getCmd)
-
-	ImageCmd.PersistentFlags().StringVar(&dockerHost, "docker_host", "", "docker host to use for interacting with images; only set if DOCKER_HOST environment variable is not set; Default: unix:///var/run/docker.sock; Priority: Flag > ENV > Config File > Default")
+	imageCommand.
+		PersistentFlags().
+		StringVar(&dockerHost, "docker_host", "", "docker host to use for interacting with images; only set if DOCKER_HOST environment variable is not set; Default: unix:///var/run/docker.sock; Priority: Flag > ENV > Config File > Default")
 }

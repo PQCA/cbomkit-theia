@@ -19,13 +19,13 @@ package javasecurity
 import (
 	goerrors "errors"
 	"fmt"
+	advancedcomponentslice "github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	log "github.com/sirupsen/logrus"
 	"log/slog"
-	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	advancedcomponentslice "github.com/IBM/cbomkit-theia/scanner/componentwithconfidenceslice"
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
@@ -60,28 +60,17 @@ func (*Plugin) GetType() plugins.PluginType {
 // UpdateBOM High-level function to update a list of components
 // (e.g., remove components and add new ones) based on the underlying filesystem
 func (javaSecurityPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
-	slog.Warn("Current version of CBOMkit-theia does not take dynamic changes of java security properties (e.g. via System.setProperty) into account. Use with caution!")
-
-	if bom.Components == nil {
-		return nil
-	}
-
-	properties.ErrorHandler = func(err error) {
-		slog.Error("Fatal error occurred during parsing of the java.security file", "err", err.Error())
-		os.Exit(1)
-	}
+	log.Warn("Current version does not take dynamic changes of java security properties (e.g. via System.setProperty) into account.")
 
 	configurations := make(map[string]*properties.Properties)
-
-	err := fs.WalkDir(
+	if err := fs.WalkDir(
 		func(path string) (err error) {
 			if javaSecurityPlugin.isConfigFile(path) {
-				slog.Info("Adding java.security config file", "path", path)
 				readCloser, err := fs.Open(path)
 				if err != nil {
 					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
 				}
-				content, err := filesystem.ReadAllClose(readCloser)
+				content, err := filesystem.ReadAllAndClose(readCloser)
 				if err != nil {
 					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
 				}
@@ -89,70 +78,72 @@ func (javaSecurityPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 				if err != nil {
 					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
 				}
-
+				log.Info("java.security file found: ", path)
 				configurations[path] = config
 			}
-
-			return err
-		})
-
-	if err != nil {
+			return nil
+		}); err != nil {
+		log.Error("Error while trying to scan for java.security files: ", err)
 		return err
+	}
+
+	if len(configurations) == 0 {
+		log.Warn("No java.security files detected.")
+		return nil
 	}
 
 	dockerConfig, ok := fs.GetConfig()
 	var configuration *properties.Properties
-	if ok && len(configurations) > 1 {
-		configuration = javaSecurityPlugin.chooseMostLikelyConfiguration(configurations, dockerConfig)
-	} else {
+	if !ok {
 		configuration = chooseFirstConfiguration(configurations)
+	} else {
+		configuration = javaSecurityPlugin.chooseMostLikelyConfiguration(configurations, dockerConfig)
 	}
 
 	security, err := newJavaSecurity(configuration, fs)
-
 	if err != nil {
+		slog.Error("Could not parse java.security file: ", err)
 		return err
 	}
-
-	insufficientInformationErrors := []error{}
-
+	var insufficientInformationErrors []error
 	advancedCompSlice := advancedcomponentslice.FromComponentSlice(*bom.Components)
-
 	for i, comp := range *bom.Components {
-		if comp.Type == cdx.ComponentTypeCryptographicAsset {
-			if comp.CryptoProperties != nil {
-				err := security.updateComponent(i, advancedCompSlice)
-				if err != nil {
-					if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
-						insufficientInformationErrors = append(insufficientInformationErrors, err)
-					} else {
-						return fmt.Errorf("scanner java: error while updating component %v\n%w", advancedCompSlice.GetByIndex(i).Name, err)
-					}
-				}
+		if comp.Type != cdx.ComponentTypeCryptographicAsset {
+			continue
+		}
 
-				slog.Debug("Component has been analyzed and confidence has been set", "component", advancedCompSlice.GetByIndex(i).Name, "confidence", advancedCompSlice.GetByIndex(i).Confidence.GetValue())
+		if comp.CryptoProperties == nil {
+			log.Warn("component is a cryptographic asset but has empty properties: ", advancedCompSlice.GetByIndex(i).Name)
+			continue
+		}
+
+		err := security.updateComponent(i, advancedCompSlice)
+		if err != nil {
+			if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
+				insufficientInformationErrors = append(insufficientInformationErrors, err)
 			} else {
-				slog.Debug("Component is a crypto asset but has empty properties. Cannot evaluate that. Continuing.", "component", advancedCompSlice.GetByIndex(i).Name)
+				return fmt.Errorf("error while updating component %v\n%w", advancedCompSlice.GetByIndex(i).Name, err)
 			}
 		}
+
+		log.Info("component has been analyzed and confidence has been set: component=", advancedCompSlice.GetByIndex(i).Name, ",confidence=", advancedCompSlice.GetByIndex(i).Confidence.GetValue())
 	}
 
 	joinedInsufficientInformationErrors := goerrors.Join(insufficientInformationErrors...)
 	if joinedInsufficientInformationErrors != nil {
-		slog.Warn("Run finished with insufficient information errors", "errors", goerrors.Join(insufficientInformationErrors...).Error())
+		log.Warn("java.security analysis finished with insufficient information errors:", goerrors.Join(insufficientInformationErrors...).Error())
 	}
 
 	*bom.Components = advancedCompSlice.GetComponentSlice()
-
 	return nil
 }
 
+// Choose the first one
 func chooseFirstConfiguration(configurations map[string]*properties.Properties) *properties.Properties {
-	// Choose the first one
-	for _, prop := range configurations {
+	for path, prop := range configurations {
+		log.Info("Selected java.security file: ", path)
 		return prop
 	}
-
 	return nil
 }
 
@@ -161,13 +152,12 @@ func (*Plugin) chooseMostLikelyConfiguration(configurations map[string]*properti
 	if !ok {
 		return chooseFirstConfiguration(configurations)
 	}
-
 	for path, conf := range configurations {
 		if strings.HasPrefix(path, jdkPath) {
+			log.Info("Selected java.security file: ", path)
 			return conf
 		}
 	}
-
 	return chooseFirstConfiguration(configurations)
 }
 
