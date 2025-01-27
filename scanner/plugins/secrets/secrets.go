@@ -38,7 +38,7 @@ func NewSecretsPlugin() (plugins.Plugin, error) {
 type Plugin struct{}
 
 func (*Plugin) GetName() string {
-	return "Secret Plugin"
+	return "Secret Detection Plugin"
 }
 
 func (*Plugin) GetExplanation() string {

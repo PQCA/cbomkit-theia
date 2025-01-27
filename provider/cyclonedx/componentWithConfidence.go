@@ -23,71 +23,62 @@ import (
 
 // ComponentWithConfidence CycloneDX component bundled with according ConfidenceLevel
 type ComponentWithConfidence struct {
-	*cdx.Component
-	Confidence           *confidenceLevel.ConfidenceLevel
-	printConfidenceLevel bool
+	Component  *cdx.Component
+	Confidence *confidenceLevel.ConfidenceLevel
 }
 
-func (componentWithConfidence *ComponentWithConfidence) SetPrintConfidenceLevel(value bool) {
-	componentWithConfidence.printConfidenceLevel = value
-}
-
-// ComponentWithConfidenceSlice Slice of componentWithConfidence with a map mapping BOMReference to index in the component slice;
+// ComponentsWithConfidenceSlice Slice of componentWithConfidence with a map mapping BOMReference to index in the component slice;
 // bomRefMap can be used to access members of components by BOMReference without searching for the BOMReference in the structs itself
-type ComponentWithConfidenceSlice struct {
-	components []ComponentWithConfidence
-	bomRefMap  map[cdx.BOMReference]int
+type ComponentsWithConfidenceSlice struct {
+	Components []ComponentWithConfidence
+	BomRefMap  map[cdx.BOMReference]int
 }
 
-// FromComponentSlice Generate a AdvancedComponentSlice from a slice of components
-func FromComponentSlice(slice []cdx.Component) *ComponentWithConfidenceSlice {
-	advancedComponentSlice := ComponentWithConfidenceSlice{
-		components: make([]ComponentWithConfidence, 0, len(slice)),
-		bomRefMap:  make(map[cdx.BOMReference]int),
+// ExtendFrom Generate a AdvancedComponentSlice from a slice of components
+func ExtendFrom(slice []cdx.Component) *ComponentsWithConfidenceSlice {
+	advancedComponentSlice := ComponentsWithConfidenceSlice{
+		Components: make([]ComponentWithConfidence, 0, len(slice)),
+		BomRefMap:  make(map[cdx.BOMReference]int),
 	}
 
 	for i, comp := range slice {
-		advancedComponentSlice.components = append(advancedComponentSlice.components, ComponentWithConfidence{
-			Component:            &comp,
-			Confidence:           confidenceLevel.New(),
-			printConfidenceLevel: false,
+		advancedComponentSlice.Components = append(advancedComponentSlice.Components, ComponentWithConfidence{
+			Component:  &comp,
+			Confidence: confidenceLevel.New(),
 		})
 
 		if comp.BOMRef != "" {
-			advancedComponentSlice.bomRefMap[cdx.BOMReference(comp.BOMRef)] = i
+			advancedComponentSlice.BomRefMap[cdx.BOMReference(comp.BOMRef)] = i
 		}
 	}
-
 	return &advancedComponentSlice
 }
 
 // GetByIndex Get member of AdvancedComponentSlice by index
-func (advancedComponentSlice *ComponentWithConfidenceSlice) GetByIndex(i int) *ComponentWithConfidence {
-	return &advancedComponentSlice.components[i]
+func (advancedComponentSlice *ComponentsWithConfidenceSlice) GetByIndex(i int) *ComponentWithConfidence {
+	return &advancedComponentSlice.Components[i]
 }
 
 // GetByRef Get member of AdvancedComponentSlice by BOMReference
-func (advancedComponentSlice *ComponentWithConfidenceSlice) GetByRef(ref cdx.BOMReference) (*ComponentWithConfidence, bool) {
-	i, ok := advancedComponentSlice.bomRefMap[ref]
+func (advancedComponentSlice *ComponentsWithConfidenceSlice) GetByRef(ref cdx.BOMReference) (*ComponentWithConfidence, bool) {
+	i, ok := advancedComponentSlice.BomRefMap[ref]
 	if !ok {
 		return &ComponentWithConfidence{}, false
 	} else {
-		return &advancedComponentSlice.components[i], true
+		return &advancedComponentSlice.Components[i], true
 	}
 }
 
 // GetComponentSlice Generate CycloneDX Components from this AdvancedComponentSlice; automatically sets the confidence_level property
-func (advancedComponentSlice *ComponentWithConfidenceSlice) GetComponentSlice() []cdx.Component {
-	finalCompSlice := make([]cdx.Component, 0, len(advancedComponentSlice.components))
-
-	for _, compWithConf := range advancedComponentSlice.components {
-		if compWithConf.printConfidenceLevel {
-			addPropertyOrCreateNew(compWithConf.Component, compWithConf.Confidence.GetProperty())
+func (advancedComponentSlice *ComponentsWithConfidenceSlice) GetComponentSlice() []cdx.Component {
+	components := make([]cdx.Component, 0, len(advancedComponentSlice.Components))
+	for _, component := range advancedComponentSlice.Components {
+		if component.Confidence != nil {
+			addPropertyOrCreateNew(component.Component, component.Confidence.GetProperty())
 		}
-		finalCompSlice = append(finalCompSlice, *compWithConf.Component)
+		components = append(components, *component.Component)
 	}
-
-	return finalCompSlice
+	return components
 }
 
 func addPropertyOrCreateNew(comp *cdx.Component, prop cdx.Property) {

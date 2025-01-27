@@ -19,9 +19,8 @@ package javasecurity
 import (
 	goerrors "errors"
 	"fmt"
-	advancedcomponentslice "github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	cyclonedx "github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	log "github.com/sirupsen/logrus"
-	"log/slog"
 	"path/filepath"
 	"strings"
 
@@ -49,7 +48,7 @@ func (*Plugin) GetName() string {
 }
 
 func (*Plugin) GetExplanation() string {
-	return "Verify the executability of cryptographic assets from Java code\nAdds a confidence level (0-100) to the CBOM components to show how likely it is that this component is actually executable"
+	return "Verify the excitability of cryptographic assets from Java code\nAdds a confidence level (0-100) to the CBOM components to show how likely it is that this component is actually executable"
 }
 
 // GetType Get the type of the plugin
@@ -59,106 +58,141 @@ func (*Plugin) GetType() plugins.PluginType {
 
 // UpdateBOM High-level function to update a list of components
 // (e.g., remove components and add new ones) based on the underlying filesystem
-func (javaSecurityPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
-	log.Warn("Current version does not take dynamic changes of java security properties (e.g. via System.setProperty) into account.")
+func (plugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
+	log.Warn("Current version does not take dynamic changes of java javaSecurity properties (e.g. via System.setProperty) into account.")
 
-	configurations := make(map[string]*properties.Properties)
-	if err := fs.WalkDir(
-		func(path string) (err error) {
-			if javaSecurityPlugin.isConfigFile(path) {
-				readCloser, err := fs.Open(path)
-				if err != nil {
-					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
-				}
-				content, err := filesystem.ReadAllAndClose(readCloser)
-				if err != nil {
-					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
-				}
-				config, err := properties.LoadString(string(content))
-				if err != nil {
-					return scannererrors.GetParsingFailedAlthoughCheckedError(err, javaSecurityPlugin.GetName())
-				}
-				log.Info("java.security file found: ", path)
-				configurations[path] = config
-			}
-			return nil
-		}); err != nil {
-		log.Error("Error while trying to scan for java.security files: ", err)
+	javaSecurityFiles, err := plugin.findJavaSecurityFiles(fs)
+	if err != nil {
 		return err
 	}
 
-	if len(configurations) == 0 {
-		log.Warn("No java.security files detected.")
+	if len(javaSecurityFiles) == 0 {
+		log.Warn("No java.javaSecurity files detected.")
 		return nil
 	}
 
-	dockerConfig, ok := fs.GetConfig()
-	var configuration *properties.Properties
-	if !ok {
-		configuration = chooseFirstConfiguration(configurations)
+	var javaSecurityFile *JavaSecurity
+	if dockerConfig, ok := fs.GetConfig(); ok {
+		javaSecurityFile = plugin.selectJavaSecurityFile(javaSecurityFiles, &dockerConfig)
 	} else {
-		configuration = javaSecurityPlugin.chooseMostLikelyConfiguration(configurations, dockerConfig)
+		javaSecurityFile = plugin.selectJavaSecurityFile(javaSecurityFiles, nil)
 	}
 
-	security, err := newJavaSecurity(configuration, fs)
+	javaSecurityFilePrint := fmt.Sprintf("content:\n%+v\n", javaSecurityFile)
+	log.Info(javaSecurityFilePrint)
+
+	err = javaSecurityFile.analyse(fs)
 	if err != nil {
-		slog.Error("Could not parse java.security file: ", err)
+		log.Error("could not analyse java.security file: ", err)
 		return err
 	}
+
 	var insufficientInformationErrors []error
-	advancedCompSlice := advancedcomponentslice.FromComponentSlice(*bom.Components)
-	for i, comp := range *bom.Components {
-		if comp.Type != cdx.ComponentTypeCryptographicAsset {
+	components := cyclonedx.ExtendFrom(*bom.Components)
+	for _, component := range components.Components {
+		if component.Component.Type != cdx.ComponentTypeCryptographicAsset {
+			continue
+		}
+		if component.Component.CryptoProperties == nil {
+			log.Warn("component is a cryptographic asset but has empty properties: ", component.Component.Name)
 			continue
 		}
 
-		if comp.CryptoProperties == nil {
-			log.Warn("component is a cryptographic asset but has empty properties: ", advancedCompSlice.GetByIndex(i).Name)
-			continue
-		}
-
-		err := security.updateComponent(i, advancedCompSlice)
+		err := javaSecurityFile.updateComponent(component, components)
 		if err != nil {
 			if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
 				insufficientInformationErrors = append(insufficientInformationErrors, err)
 			} else {
-				return fmt.Errorf("error while updating component %v\n%w", advancedCompSlice.GetByIndex(i).Name, err)
+				return fmt.Errorf("error while updating component %v\n%w", component.Component.Name, err)
 			}
 		}
-
-		log.Info("component has been analyzed and confidence has been set: component=", advancedCompSlice.GetByIndex(i).Name, ",confidence=", advancedCompSlice.GetByIndex(i).Confidence.GetValue())
 	}
-
+	// errors
 	joinedInsufficientInformationErrors := goerrors.Join(insufficientInformationErrors...)
 	if joinedInsufficientInformationErrors != nil {
-		log.Warn("java.security analysis finished with insufficient information errors:", goerrors.Join(insufficientInformationErrors...).Error())
+		log.Warn("java.javaSecurity analysis finished with insufficient information errors:", goerrors.Join(insufficientInformationErrors...).Error())
 	}
 
-	*bom.Components = advancedCompSlice.GetComponentSlice()
+	*bom.Components = components.GetComponentSlice()
+	log.Info("java.javaSecurity scan done!")
 	return nil
+}
+
+func (plugin *Plugin) findJavaSecurityFiles(fs filesystem.Filesystem) ([]JavaSecurity, error) {
+	var javaSecurityFiles []JavaSecurity
+	if err := fs.WalkDir(
+		func(path string) (err error) {
+			if plugin.isConfigFile(path) {
+				readCloser, err := fs.Open(path)
+				if err != nil {
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, plugin.GetName())
+				}
+				content, err := filesystem.ReadAllAndClose(readCloser)
+				if err != nil {
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, plugin.GetName())
+				}
+				config, err := properties.LoadString(string(content))
+				if err != nil {
+					return scannererrors.GetParsingFailedAlthoughCheckedError(err, plugin.GetName())
+				}
+				if config == nil {
+					return fmt.Errorf("java.security: there are no java.security properties")
+				}
+				log.Info("java.security file found: ", path)
+				javaSecurityFiles = append(javaSecurityFiles, New(*config, path))
+			}
+			return nil
+		}); err != nil {
+		log.Error("Error while trying to find java.security files: ", err)
+		return nil, err
+	}
+	return javaSecurityFiles, nil
+}
+
+func (plugin *Plugin) selectJavaSecurityFile(javaSecurityFiles []JavaSecurity, dockerConfig *v1.Config) *JavaSecurity {
+	if dockerConfig == nil {
+		return plugin.chooseFirstConfiguration(javaSecurityFiles)
+	}
+
+	jdkPath, ok := getJDKPath(*dockerConfig)
+	if !ok {
+		return plugin.chooseFirstConfiguration(javaSecurityFiles)
+	}
+	for _, file := range javaSecurityFiles {
+		if strings.HasPrefix(file.path, jdkPath) {
+			log.Info("selected java.security file: ", file.path)
+			return &file
+		}
+	}
+	return plugin.chooseFirstConfiguration(javaSecurityFiles)
 }
 
 // Choose the first one
-func chooseFirstConfiguration(configurations map[string]*properties.Properties) *properties.Properties {
-	for path, prop := range configurations {
-		log.Info("Selected java.security file: ", path)
-		return prop
+func (*Plugin) chooseFirstConfiguration(javaSecurityFiles []JavaSecurity) *JavaSecurity {
+	for _, file := range javaSecurityFiles {
+		log.Info("selected java.security file: ", file.path)
+		return &file
 	}
 	return nil
 }
 
-func (*Plugin) chooseMostLikelyConfiguration(configurations map[string]*properties.Properties, dockerConfig v1.Config) (chosenProp *properties.Properties) {
-	jdkPath, ok := getJDKPath(dockerConfig)
-	if !ok {
-		return chooseFirstConfiguration(configurations)
+// Checks whether the current file at a path is a java.security config file
+func (*Plugin) isConfigFile(path string) bool {
+	// Check if this file is the java.security file and if that is the case extract the path of the active crypto.policy files
+	dir, _ := filepath.Split(path)
+	dir = filepath.Clean(dir)
+	// Check the correct directory
+	if !(strings.HasSuffix(dir, filepath.Join("jre", "lib", "security")) ||
+		strings.HasSuffix(dir, filepath.Join("conf", "security"))) {
+		return false
 	}
-	for path, conf := range configurations {
-		if strings.HasPrefix(path, jdkPath) {
-			log.Info("Selected java.security file: ", path)
-			return conf
-		}
+	// Check a file extension
+	ext := filepath.Ext(path)
+	if ext != ".security" {
+		return false
 	}
-	return chooseFirstConfiguration(configurations)
+	// If all checks passed, return true
+	return true
 }
 
 func getJDKPath(dockerConfig v1.Config) (value string, ok bool) {
@@ -190,28 +224,25 @@ func getJDKPathFromEnvironmentVariables(envVariables []string) (value string, ok
 			continue
 		}
 	}
-
 	return "", false
 }
 
-const LineSeparator = "/"
-
 func getJDKPathFromRunCommand(dockerConfig v1.Config) (value string, ok bool) {
+	const lineSeparator = "/"
 	for _, s := range append(dockerConfig.Cmd, dockerConfig.Entrypoint...) {
 		if strings.Contains(s, "java") {
 			// Try to extract only the binary path
 			fields := strings.Fields(s)
 			if len(fields) > 0 {
 				path := fields[0]
-				pathList := strings.Split(path, LineSeparator)
+				pathList := strings.Split(path, lineSeparator)
 				for i, pathElement := range pathList {
 					if strings.Contains(pathElement, "jdk") {
-						return LineSeparator + filepath.Join(pathList[:i+1]...), true
+						return lineSeparator + filepath.Join(pathList[:i+1]...), true
 					}
 				}
 			}
 		}
 	}
-
 	return "", false
 }

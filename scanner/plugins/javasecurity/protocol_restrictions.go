@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	"github.com/IBM/cbomkit-theia/scanner/confidenceLevel"
+	log "github.com/sirupsen/logrus"
 	"log/slog"
 	"strconv"
 	"strings"
@@ -52,18 +53,18 @@ const (
 
 // High-Level function to update a protocol component based on the restriction in the JavaSecurity object
 // Returns nil if the updateComponent is not allowed
-func (javaSecurity *JavaSecurity) updateProtocolComponent(index int, advancedComponentSlice *cyclonedx.ComponentWithConfidenceSlice) error {
-	if advancedComponentSlice.GetByIndex(index).CryptoProperties.AssetType != cdx.CryptoAssetTypeProtocol {
-		return fmt.Errorf("scanner java: component of type %v cannot be used in function updateProtocolComponent", advancedComponentSlice.GetByIndex(index).CryptoProperties.AssetType)
+func (javaSecurity *JavaSecurity) updateProtocolComponent(component cyclonedx.ComponentWithConfidence, components *cyclonedx.ComponentsWithConfidenceSlice) error {
+	if component.Component.CryptoProperties.AssetType != cdx.CryptoAssetTypeProtocol {
+		return fmt.Errorf("scanner java: component of type %v cannot be used in function updateProtocolComponent", component.Component.CryptoProperties.AssetType)
 	}
 
-	slog.Debug("Updating protocol component", "component", advancedComponentSlice.GetByIndex(index).Name)
+	log.Debug("Updating protocol component", "component", component.Component.Name)
 
-	switch advancedComponentSlice.GetByIndex(index).CryptoProperties.ProtocolProperties.Type {
+	switch component.Component.CryptoProperties.ProtocolProperties.Type {
 	case cdx.CryptoProtocolTypeTLS:
-		for _, cipherSuites := range *advancedComponentSlice.GetByIndex(index).CryptoProperties.ProtocolProperties.CipherSuites {
+		for _, cipherSuites := range *component.Component.CryptoProperties.ProtocolProperties.CipherSuites {
 			// Test the protocol itself
-			cipherSuiteConfidenceLevel, err := evalAll(&javaSecurity.tlsDisabledAlgorithms, *advancedComponentSlice.GetByIndex(index).Component)
+			cipherSuiteConfidenceLevel, err := evalAll(&javaSecurity.tlsDisabledAlgorithms, *component.Component)
 
 			if err != nil {
 				return err
@@ -71,7 +72,7 @@ func (javaSecurity *JavaSecurity) updateProtocolComponent(index int, advancedCom
 
 			// Test all algorithms in the protocol
 			for _, algorithmRef := range *cipherSuites.Algorithms {
-				algo, ok := advancedComponentSlice.GetByRef(algorithmRef)
+				algo, ok := components.GetByRef(algorithmRef)
 				if ok {
 					algoConfidenceLevel, err := evalAll(&javaSecurity.tlsDisabledAlgorithms, *algo.Component)
 
@@ -81,11 +82,9 @@ func (javaSecurity *JavaSecurity) updateProtocolComponent(index int, advancedCom
 
 					algo.Confidence.AddSubConfidenceLevel(algoConfidenceLevel, false)
 					cipherSuiteConfidenceLevel.AddSubConfidenceLevel(algoConfidenceLevel, true)
-					algo.SetPrintConfidenceLevel(true)
 				}
 			}
-
-			advancedComponentSlice.GetByIndex(index).Confidence.AddSubConfidenceLevel(cipherSuiteConfidenceLevel, false)
+			component.Confidence.AddSubConfidenceLevel(cipherSuiteConfidenceLevel, false)
 		}
 	}
 

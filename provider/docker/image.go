@@ -38,7 +38,7 @@ import (
 	v1 "github.com/google/go-containerregistry/pkg/v1"
 )
 
-// ActiveImage Represents an active image (e.g. with an active client connection)
+// ActiveImage Represents an active image (e.g., with an active client connection)
 type ActiveImage struct {
 	*image.Image
 	id     string
@@ -64,7 +64,7 @@ func (image ActiveImage) GetConfig() (config v1.Config, ok bool) {
 // GetImage Parses a DockerImage from an identifier, possibly pulling it from a registry;
 // Caller is responsible to call image.TearDown() after usage
 func GetImage(name string) (image ActiveImage, err error) {
-	slog.Info("Getting prebuilt image", "image", name)
+	log.Info("try to fetch image ", name, " ...")
 	// context for network requests
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -76,7 +76,7 @@ func GetImage(name string) (image ActiveImage, err error) {
 
 	imageID := getImgIDWithoutDigest(stereoscopeImage.Metadata.ID)
 
-	slog.Info("Successfully acquired image", "image", name, "id", imageID)
+	log.Info("successfully download image ", name, " with id ", imageID)
 
 	cli, err := client.NewClientWithOpts(client.FromEnv, client.WithAPIVersionNegotiation())
 	if err != nil {

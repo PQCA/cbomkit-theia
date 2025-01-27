@@ -17,9 +17,9 @@
 package javasecurity
 
 import (
-	goerrors "errors"
 	"fmt"
-	advancedcomponentslice "github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	cyclonedx "github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	"github.com/IBM/cbomkit-theia/utils"
 	"log/slog"
 	"path/filepath"
 	"strconv"
@@ -33,76 +33,41 @@ import (
 	"github.com/magiconair/properties"
 )
 
-/*
-=======
-General
-=======
-*/
-
-// Checks whether the current file at a path is a java.security config file
-func (*Plugin) isConfigFile(path string) bool {
-	// Check if this file is the java.security file and if that is the case extract the path of the active crypto.policy files
-	dir, _ := filepath.Split(path)
-	dir = filepath.Clean(dir)
-
-	// Check the correct directory
-	if !(strings.HasSuffix(dir, filepath.Join("jre", "lib", "security")) ||
-		strings.HasSuffix(dir, filepath.Join("conf", "security"))) {
-		return false
-	}
-
-	// Check a file extension
-	ext := filepath.Ext(path)
-	if ext != ".security" {
-		return false
-	}
-
-	// If all checks passed, return true
-	return true
-}
-
-/*
-=======
-java.security related
-=======
-*/
-
 // JavaSecurity represents the java.security file(s) found on the system
 type JavaSecurity struct {
-	*properties.Properties
+	properties            properties.Properties
+	path                  string
 	tlsDisabledAlgorithms []AlgorithmRestriction
 }
 
-func newJavaSecurity(properties *properties.Properties, fs filesystem.Filesystem) (JavaSecurity, error) {
-	additionalSecurityProperties, override, err := checkConfig(properties, fs)
+func New(p properties.Properties, path string) JavaSecurity {
+	return JavaSecurity{properties: p, path: path}
+}
+
+func (javaSecurity *JavaSecurity) analyse(fs filesystem.Filesystem) error {
+	// environment
+	additionalSecurityProperties, overridden, err := javaSecurity.checkForEnvironmentConfigurations(fs)
 	if err != nil {
-		return JavaSecurity{}, err
+		return err
 	}
-
-	if !override {
-		if additionalSecurityProperties != nil {
-			properties.Merge(additionalSecurityProperties)
-		}
-	} else {
-		properties = additionalSecurityProperties
+	if overridden && additionalSecurityProperties != nil {
+		javaSecurity.properties.Merge(additionalSecurityProperties)
 	}
-
-	restrictions, err := extractTLSRules(properties)
+	// tls and algorithm restriction
+	restrictions, err := javaSecurity.extractTLSRules()
 	if err != nil {
-		return JavaSecurity{}, err
+		return err
 	}
+	javaSecurity.tlsDisabledAlgorithms = restrictions
 
-	return JavaSecurity{
-		properties,
-		restrictions,
-	}, err
+	return nil
 }
 
 // Assesses if the component is from a source affected by this type of config (e.g., a java file),
 // requires "Evidence" and "Occurrences" to be present in the BOM
 func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool, error) {
 	if component.Evidence == nil || component.Evidence.Occurrences == nil { // If there is no evidence telling us that whether this component comes from a java file, we cannot assess it
-		return false, scannererrors.GetInsufficientInformationError("cannot evaluate due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
+		return false, scannererrors.GetInsufficientInformationError("java.security: cannot evaluate due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
 	}
 
 	for _, occurrence := range *component.Evidence.Occurrences {
@@ -114,53 +79,38 @@ func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool,
 }
 
 // Update a single component; returns nil if component is not allowed
-func (javaSecurity *JavaSecurity) updateComponent(index int, advancedComponentSlice *advancedcomponentslice.ComponentWithConfidenceSlice) (err error) {
-	ok, err := javaSecurity.isComponentAffectedByConfig(*advancedComponentSlice.GetByIndex(index).Component)
-
-	if ok {
-		advancedComponentSlice.GetByIndex(index).SetPrintConfidenceLevel(true)
-	} else {
-		if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
-			return err
-		}
+func (javaSecurity *JavaSecurity) updateComponent(component cyclonedx.ComponentWithConfidence, components *cyclonedx.ComponentsWithConfidenceSlice) error {
+	ok, err := javaSecurity.isComponentAffectedByConfig(*component.Component)
+	if !ok {
+		return err
 	}
 
-	switch advancedComponentSlice.GetByIndex(index).CryptoProperties.AssetType {
+	assetType := component.Component.CryptoProperties.AssetType
+	switch assetType {
 	case cdx.CryptoAssetTypeProtocol:
-		return javaSecurity.updateProtocolComponent(index, advancedComponentSlice)
+		return javaSecurity.updateProtocolComponent(component, components)
 	default:
 		return nil
 	}
 }
 
-var errNilProperties = fmt.Errorf("scanner java: properties are nil")
-
-// Remove a single item by index s from a slice
-func removeFromSlice[T interface{}](slice []T, s int) []T {
-	return append(slice[:s], slice[s+1:]...)
-}
-
 // Recursively get all comma-separated values of the property key. Recursion is necessary since values can include
 // "include" directives which refer to other properties and include them in this property.
-func getPropertyValuesRecursively(properties *properties.Properties, key string) (values []string, err error) {
-	if properties == nil {
-		return values, errNilProperties
-	}
-
-	fullString, ok := properties.Get(key)
+func (javaSecurity *JavaSecurity) extractValuesForKey(key string) (values []string, err error) {
+	fullString, ok := javaSecurity.properties.Get(key)
 	if ok {
 		values = strings.Split(fullString, ",")
 		for i, value := range values {
 			values[i] = strings.TrimSpace(value)
 		}
 	}
-	toBeRemoved := []int{} // Remember they include directives and remove them later
+	var toBeRemoved []int // Remember they include directives and remove them later
 	for i, value := range values {
 		if strings.HasPrefix(value, "include") {
 			toBeRemoved = append(toBeRemoved, i)
 			split := strings.Split(value, " ")
 			if len(split) > 1 {
-				includedValues, err := getPropertyValuesRecursively(properties, split[1])
+				includedValues, err := javaSecurity.extractValuesForKey(split[1])
 				if err != nil {
 					return includedValues, err
 				}
@@ -169,179 +119,141 @@ func getPropertyValuesRecursively(properties *properties.Properties, key string)
 		}
 	}
 	for _, remove := range toBeRemoved {
-		values = removeFromSlice(values, remove)
+		values = utils.RemoveFromSlice(values, remove)
 	}
 	return values, nil
 }
 
 // Parses the TLS Rules from the java.security file
 // Returns a joined list of errors which occurred during parsing of algorithms
-func extractTLSRules(securityProperties *properties.Properties) (restrictions []AlgorithmRestriction, err error) {
-	slog.Debug("Extracting TLS rules")
+func (javaSecurity *JavaSecurity) extractTLSRules() ([]AlgorithmRestriction, error) {
+	slog.Debug("java.security: extracting TLS rules from")
 
-	securityPropertiesKey := "jdk.tls.disabledAlgorithms"
-	algorithms, err := getPropertyValuesRecursively(securityProperties, securityPropertiesKey)
-
-	if goerrors.Is(err, errNilProperties) {
-		slog.Warn("Properties of javaSecurity object are nil.")
-	} else if err != nil {
-		return restrictions, err
+	algorithms, err := javaSecurity.extractValuesForKey("jdk.tls.disabledAlgorithms")
+	if err != nil {
+		return nil, err
 	}
 
-	var algorithmParsingErrors []error
+	if len(algorithms) == 0 {
+		return nil, err
+	}
 
-	if len(algorithms) > 0 {
-		for _, algorithm := range algorithms {
-			keySize := 0
-			keySizeOperator := keySizeOperatorNone
-			name := algorithm
+	var algorithmRestriction []AlgorithmRestriction
+	for _, algorithm := range algorithms {
+		keySize := 0
+		operator := keySizeOperatorNone
+		name := algorithm
 
-			if strings.Contains(algorithm, "jdkCA") ||
-				strings.Contains(algorithm, "denyAfter") ||
-				strings.Contains(algorithm, "usage") {
-				slog.Warn("found constraint in java.security that is not supported in this version of CBOMkit-theia", "algorithm", algorithm)
+		if strings.Contains(algorithm, "jdkCA") ||
+			strings.Contains(algorithm, "denyAfter") ||
+			strings.Contains(algorithm, "usage") {
+			slog.Warn("java.security: found constraint in java.security that is not supported in this version: ", "algorithm=", algorithm)
+			continue
+		}
+
+		if strings.Contains(algorithm, "keySize") {
+			split := strings.Split(algorithm, "keySize")
+			if len(split) > 2 {
+				slog.Warn(fmt.Sprintf("java.security: keySize check check failed, %v contains too many elements (%v)", split, algorithm))
+				continue
+			}
+			name = strings.TrimSpace(split[0])
+			split[1] = strings.TrimSpace(split[1])
+			keyRestrictions := strings.Split(split[1], " ")
+
+			switch keyRestrictions[0] {
+			case "<=":
+				operator = keySizeOperatorLowerEqual
+			case "<":
+				operator = keySizeOperatorLower
+			case "==":
+				operator = keySizeOperatorEqual
+			case "!=":
+				operator = keySizeOperatorNotEqual
+			case ">=":
+				operator = keySizeOperatorGreaterEqual
+			case ">":
+				operator = keySizeOperatorGreater
+			case "":
+				operator = keySizeOperatorNone
+			default:
+				slog.Warn(fmt.Sprintf("java.security: could not analyse the following keySizeOperator %v (%v)", keyRestrictions[0], algorithm))
 				continue
 			}
 
-			if strings.Contains(algorithm, "keySize") {
-				split := strings.Split(algorithm, "keySize")
-				if len(split) > 2 {
-					algorithmParsingErrors = append(algorithmParsingErrors,
-						fmt.Errorf("scanner java: sanity check failed, %v contains too many elements (%v)", split, algorithm))
-					continue
-				}
-				name = strings.TrimSpace(split[0])
-				split[1] = strings.TrimSpace(split[1])
-				keyRestrictions := strings.Split(split[1], " ")
-
-				switch keyRestrictions[0] {
-				case "<=":
-					keySizeOperator = keySizeOperatorLowerEqual
-				case "<":
-					keySizeOperator = keySizeOperatorLower
-				case "==":
-					keySizeOperator = keySizeOperatorEqual
-				case "!=":
-					keySizeOperator = keySizeOperatorNotEqual
-				case ">=":
-					keySizeOperator = keySizeOperatorGreaterEqual
-				case ">":
-					keySizeOperator = keySizeOperatorGreater
-				case "":
-					keySizeOperator = keySizeOperatorNone
-				default:
-					algorithmParsingErrors = append(algorithmParsingErrors,
-						fmt.Errorf("scanner java: could not parse the following keySizeOperator %v (%v)", keyRestrictions[0], algorithm))
-					continue
-				}
-
-				keySize, err = strconv.Atoi(keyRestrictions[1])
-				if err != nil {
-					algorithmParsingErrors = append(algorithmParsingErrors,
-						fmt.Errorf("scanner java: (%v) %w", algorithm, err))
-					continue
-				}
+			keySize, err = strconv.Atoi(keyRestrictions[1])
+			if err != nil {
+				slog.Warn(fmt.Sprintf("java.security: could dnot extraxt keysize (%v)", algorithm))
+				continue
 			}
-
-			restrictions = append(restrictions, AlgorithmRestriction{
-				name:            name,
-				keySize:         keySize,
-				keySizeOperator: keySizeOperator,
-			})
 		}
-	} else {
-		slog.Debug("No disabled algorithms specified!", "key", securityPropertiesKey)
-	}
 
-	return restrictions, goerrors.Join(algorithmParsingErrors...)
+		algorithmRestriction = append(algorithmRestriction, AlgorithmRestriction{
+			name:            name,
+			keySize:         keySize,
+			keySizeOperator: operator,
+		})
+	}
+	return algorithmRestriction, nil
 }
 
-/*
-=======
-container image related
-=======
-*/
-
-const SecurityCmdArgument = "-Djava.security.properties="
-
 // Tries to get a config from the fs and checks the Config for potentially relevant information
-func checkConfig(securityProperties *properties.Properties, fs filesystem.Filesystem) (additionalSecurityProperties *properties.Properties, override bool, err error) {
-	slog.Debug("Checking filesystem config for additional security properties")
-
-	imageConfig, ok := fs.GetConfig()
+func (javaSecurity *JavaSecurity) checkForEnvironmentConfigurations(fs filesystem.Filesystem) (*properties.Properties, bool, error) {
+	slog.Debug("java.security: checking filesystem config for additional security properties")
+	configuration, ok := fs.GetConfig()
 	if !ok {
-		slog.Debug("Filesystem did not provide a config. This can be normal if the specified filesystem is not a docker image layer.", "fs", fs.GetIdentifier())
-		return additionalSecurityProperties, override, nil
+		slog.Debug("java.security: filesystem did not provide a config", "fs", fs.GetIdentifier())
+		return nil, false, nil
 	}
-
-	additionalSecurityProperties, override, err = checkForAdditionalSecurityFilesCMDParameter(imageConfig, securityProperties, fs)
-
-	if goerrors.Is(err, errNilProperties) {
-		slog.Warn("Properties of javaSecurity object are nil. This should not happen. Continuing anyway.", "fs", fs.GetIdentifier())
-		return additionalSecurityProperties, override, nil
-	}
-
-	return additionalSecurityProperties, override, err
+	additionalSecurityProperties, overridden, err := javaSecurity.checkForAdditionalSecurityFilesInDockerConfig(configuration, fs)
+	return additionalSecurityProperties, overridden, err
 }
 
 // Searches the image config for potentially relevant CMD parameters and potentially adds new properties
-func checkForAdditionalSecurityFilesCMDParameter(config v1.Config, securityProperties *properties.Properties, fs filesystem.Filesystem) (additionalSecurityProperties *properties.Properties, override bool, err error) {
+func (javaSecurity *JavaSecurity) checkForAdditionalSecurityFilesInDockerConfig(config v1.Config, fs filesystem.Filesystem) (*properties.Properties, bool, error) {
 	// We have to check if adding additional security files via CMD is even allowed via the java.security file (security.overridePropertiesFile property)
-
-	if securityProperties == nil { // We do not have a security file
-		return securityProperties, override, errNilProperties
+	overridePropertiesFile := javaSecurity.properties.GetBool("security.overridePropertiesFile", true)
+	if !overridePropertiesFile {
+		slog.Debug("java.security: properties don't allow additional security files. Stopping searching directly.", "fs", fs.GetIdentifier())
+		return nil, false, nil
 	}
 
-	allowAdditionalFiles := securityProperties.GetBool("security.overridePropertiesFile", true)
-	if !allowAdditionalFiles {
-		slog.Debug("Security properties don't allow additional security files. Stopping searching directly.", "fs", fs.GetIdentifier())
-		return additionalSecurityProperties, override, nil
-	}
-
-	// Now, let's check for additional files added via CMD
-	var value string
-	var ok bool
-
+	const securityCmdArgument = "-Djava.security.properties="
+	// check for additional files added via CMD
 	for _, command := range append(config.Cmd, config.Entrypoint...) {
-		value, override, ok = getJavaFlagValue(command, SecurityCmdArgument)
-
-		if ok {
-			slog.Debug("Found command that specifies new properties", "command", command)
-
-			readCloser, err := fs.Open(value)
-			if err != nil {
-				if strings.Contains(err.Error(), "could not find file path in Tree") {
-					slog.Warn("failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
-					return additionalSecurityProperties, override, nil
-				} else {
-					return additionalSecurityProperties, override, err
-				}
-			}
-			content, err := filesystem.ReadAllAndClose(readCloser)
-			if err != nil {
-				slog.Warn("failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
-				return additionalSecurityProperties, override, nil
-			}
-			additionalSecurityProperties, err = properties.LoadString(string(content))
-			return additionalSecurityProperties, override, err
+		value, overridden, ok := extractFlagValue(command, securityCmdArgument)
+		if !ok {
+			continue
 		}
+		slog.Debug("java.security: found command that specifies new properties", "command", command)
+		readCloser, err := fs.Open(value)
+		if err != nil {
+			slog.Warn("java.security: failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
+			continue
+		}
+		content, err := filesystem.ReadAllAndClose(readCloser)
+		if err != nil {
+			slog.Warn("java.security: failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
+			continue
+		}
+		additionalSecurityProperties, err := properties.LoadString(string(content))
+		return additionalSecurityProperties, overridden, err
 	}
-
-	return additionalSecurityProperties, override, err
+	return nil, false, nil
 }
 
 // Tries to extract the value of a flag in command;
 // returns ok if found; returns overwrite if double equals signs were used (==)
-func getJavaFlagValue(command string, flag string) (value string, overwrite bool, ok bool) {
+func extractFlagValue(command string, flag string) (string, bool, bool) {
 	split := strings.Split(command, flag)
-	if len(split) == 2 {
-		split = strings.Fields(split[1])
-		value = split[0]
-		if strings.HasPrefix(value, "=") {
-			overwrite = true
-			value = value[1:]
-		}
-		return value, overwrite, true
+	if len(split) != 2 {
+		return "", false, false
 	}
-	return value, overwrite, false
+	split = strings.Fields(split[1])
+	value := split[0]
+	if strings.HasPrefix(value, "=") {
+		value = value[1:]
+		return value, true, true
+	}
+	return value, false, true
 }

@@ -43,7 +43,7 @@ func (layer Layer) WalkDir(fn filesystem.FilePathAnalysisFunc) error {
 			if f.FileType == file.TypeDirectory {
 				return nil
 			}
-			
+
 			err := fn(string(path))
 
 			if errors.Is(err, scannererrors.ErrParsingFailedAlthoughChecked) {
