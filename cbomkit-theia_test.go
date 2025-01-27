@@ -30,10 +30,10 @@ import (
 	"go.uber.org/dig"
 )
 
-var testfileFolder string = "./testdata"
-var outputExtension string = "/out/bom.json"
-var bomFolderExtension string = "/in/bom.json"
-var dirExtension string = "/dir"
+var testfileFolder = "./testdata"
+var outputExtension = "/out/bom.json"
+var bomFolderExtension = "/in/bom.json"
+var dirExtension = "/dir"
 
 type testType int
 

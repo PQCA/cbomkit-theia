@@ -31,14 +31,22 @@ type ComponentWithConfidence struct {
 // bomRefMap can be used to access members of components by BOMReference without searching for the BOMReference in the structs itself
 type ComponentsWithConfidenceSlice struct {
 	Components []ComponentWithConfidence
-	BomRefMap  map[cdx.BOMReference]int
+	bomRefMap  map[cdx.BOMReference]int
 }
 
-// ExtendFrom Generate a AdvancedComponentSlice from a slice of components
-func ExtendFrom(slice []cdx.Component) *ComponentsWithConfidenceSlice {
+func NewComponentWithConfidence(component *cdx.Component) *ComponentWithConfidence {
+	return &ComponentWithConfidence{Component: component, Confidence: confidenceLevel.New()}
+}
+
+func NewComponentsWithConfidenceSlice() *ComponentsWithConfidenceSlice {
+	return &ComponentsWithConfidenceSlice{Components: make([]ComponentWithConfidence, 0), bomRefMap: make(map[cdx.BOMReference]int)}
+}
+
+// Transform Generate a AdvancedComponentSlice from a slice of components
+func Transform(slice []cdx.Component) *ComponentsWithConfidenceSlice {
 	advancedComponentSlice := ComponentsWithConfidenceSlice{
 		Components: make([]ComponentWithConfidence, 0, len(slice)),
-		BomRefMap:  make(map[cdx.BOMReference]int),
+		bomRefMap:  make(map[cdx.BOMReference]int),
 	}
 
 	for i, comp := range slice {
@@ -48,7 +56,7 @@ func ExtendFrom(slice []cdx.Component) *ComponentsWithConfidenceSlice {
 		})
 
 		if comp.BOMRef != "" {
-			advancedComponentSlice.BomRefMap[cdx.BOMReference(comp.BOMRef)] = i
+			advancedComponentSlice.bomRefMap[cdx.BOMReference(comp.BOMRef)] = i
 		}
 	}
 	return &advancedComponentSlice
@@ -61,7 +69,7 @@ func (advancedComponentSlice *ComponentsWithConfidenceSlice) GetByIndex(i int) *
 
 // GetByRef Get member of AdvancedComponentSlice by BOMReference
 func (advancedComponentSlice *ComponentsWithConfidenceSlice) GetByRef(ref cdx.BOMReference) (*ComponentWithConfidence, bool) {
-	i, ok := advancedComponentSlice.BomRefMap[ref]
+	i, ok := advancedComponentSlice.bomRefMap[ref]
 	if !ok {
 		return &ComponentWithConfidence{}, false
 	} else {

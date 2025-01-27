@@ -88,7 +88,7 @@ func (plugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	}
 
 	var insufficientInformationErrors []error
-	components := cyclonedx.ExtendFrom(*bom.Components)
+	components := cyclonedx.Transform(*bom.Components)
 	for _, component := range components.Components {
 		if component.Component.Type != cdx.ComponentTypeCryptographicAsset {
 			continue
@@ -255,7 +255,7 @@ type JavaSecurity struct {
 }
 
 func New(p properties.Properties, path string) JavaSecurity {
-	return JavaSecurity{properties: p, path: path}
+	return JavaSecurity{properties: p, path: path, tlsDisabledAlgorithms: make([]AlgorithmRestriction, 0)}
 }
 
 func (javaSecurity *JavaSecurity) analyse(fs filesystem.Filesystem) error {
@@ -309,6 +309,41 @@ func (javaSecurity *JavaSecurity) updateComponent(component cyclonedx.ComponentW
 	}
 }
 
+// High-Level function to update a protocol component based on the restriction in the JavaSecurity object
+// Returns nil if the updateComponent is not allowed
+func (javaSecurity *JavaSecurity) updateProtocolComponent(component cyclonedx.ComponentWithConfidence, components *cyclonedx.ComponentsWithConfidenceSlice) error {
+	if component.Component.CryptoProperties.AssetType != cdx.CryptoAssetTypeProtocol {
+		return fmt.Errorf("scanner java: component of type %v cannot be used in function updateProtocolComponent", component.Component.CryptoProperties.AssetType)
+	}
+
+	switch component.Component.CryptoProperties.ProtocolProperties.Type {
+	case cdx.CryptoProtocolTypeTLS:
+		for _, cipherSuites := range *component.Component.CryptoProperties.ProtocolProperties.CipherSuites {
+			// Test the protocol itself
+			cipherSuiteConfidenceLevel, err := evaluateRestrictions(javaSecurity.tlsDisabledAlgorithms, *component.Component)
+			if err != nil {
+				return err
+			}
+
+			// Test all algorithms in the protocol
+			for _, algorithmRef := range *cipherSuites.Algorithms {
+				algo, ok := components.GetByRef(algorithmRef)
+				if ok {
+					algoConfidenceLevel, err := evaluateRestrictions(javaSecurity.tlsDisabledAlgorithms, *algo.Component)
+					if err != nil {
+						return err
+					}
+					algo.Confidence.AddSubConfidenceLevel(algoConfidenceLevel, false)
+					cipherSuiteConfidenceLevel.AddSubConfidenceLevel(algoConfidenceLevel, true)
+				}
+			}
+			component.Confidence.AddSubConfidenceLevel(cipherSuiteConfidenceLevel, false)
+			slog.Debug("Protocol component updated", "component", component.Component.Name)
+		}
+	}
+	return nil
+}
+
 // Recursively get all comma-separated values of the property key. Recursion is necessary since values can include
 // "include" directives which refer to other properties and include them in this property.
 func (javaSecurity *JavaSecurity) extractValuesForKey(key string) (values []string, err error) {
@@ -319,24 +354,6 @@ func (javaSecurity *JavaSecurity) extractValuesForKey(key string) (values []stri
 			values[i] = strings.TrimSpace(value)
 		}
 	}
-	/*
-		var toBeRemoved []int // Remember they include directives and remove them later
-		for i, value := range values {
-			if strings.HasPrefix(value, "include") {
-				toBeRemoved = append(toBeRemoved, i)
-				split := strings.Split(value, " ")
-				if len(split) > 1 {
-					includedValues, err := javaSecurity.extractValuesForKey(split[1])
-					if err != nil {
-						return includedValues, err
-					}
-					values = append(values, includedValues...)
-				}
-			}
-		}
-		for _, remove := range toBeRemoved {
-			values = utils.RemoveFromSlice(values, remove)
-		}*/
 	return values, nil
 }
 

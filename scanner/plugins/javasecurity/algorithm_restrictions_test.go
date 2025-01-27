@@ -1,4 +1,4 @@
-// Copyright 2024 IBM
+// Copyright 2025 IBM
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -14,33 +14,21 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package cyclonedx
+package javasecurity
 
 import (
-	"os"
+	"github.com/CycloneDX/cyclonedx-go"
 	"testing"
 )
 
-var testfileFolder = "./testfiles"
-
-var tests = []struct {
-	in  string
-	err bool
-}{
-	{testfileFolder + "/algorithm.json", false},
-	{testfileFolder + "/algorithmBroken.json", true},
-	{testfileFolder + "/protocol.json", false},
-}
-
-// Test if the BOMs are parsed as expected
-func TestParseBOM(t *testing.T) {
-	for _, test := range tests {
-		t.Run(test.in, func(t *testing.T) {
-			inReader, _ := os.Open(test.in)
-			_, err := ParseBOM(inReader)
-			if (err != nil) != test.err {
-				t.Fatalf("Failed to parse %v", test.in)
-			}
-		})
-	}
+func TestEvaluation(t *testing.T) {
+	t.Run("Extracting TLS Rules from security file", func(t *testing.T) {
+		component := cyclonedx.Component{Name: "RSA-2048", CryptoProperties: &cyclonedx.CryptoProperties{AssetType: cyclonedx.CryptoAssetTypeAlgorithm}}
+		algorithmRestriction := AlgorithmRestriction{"RSA", keySizeOperatorGreater, 2048}
+		confidenceLevel, err := algorithmRestriction.evaluate(component)
+		if err != nil {
+			t.Fatal(err)
+		}
+		println(confidenceLevel)
+	})
 }

@@ -95,7 +95,7 @@ Now a.GetValue() returns the average of b.GetValue() and c.GetValue(). (a.value 
 
 Warning: a, b and c are not permanently linked by this. AddSubConfidenceLevel just calculates the average once this function is called
 */
-func (confidenceLevel *ConfidenceLevel) AddSubConfidenceLevel(sub ConfidenceLevel, ignoreDefaultConfidence bool) {
+func (confidenceLevel *ConfidenceLevel) AddSubConfidenceLevel(sub *ConfidenceLevel, ignoreDefaultConfidence bool) {
 	if ignoreDefaultConfidence && sub.value == confidenceLevelDefault {
 		return
 	}
