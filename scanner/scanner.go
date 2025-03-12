@@ -32,6 +32,7 @@ import (
 	"github.com/IBM/cbomkit-theia/scanner/plugins/javasecurity"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/keys"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/secrets"
+	"github.com/IBM/cbomkit-theia/scanner/plugins/vex"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 	"github.com/google/uuid"
@@ -60,6 +61,7 @@ func GetAllPluginConstructors() map[string]pluginpackage.PluginConstructor {
 		"javasecurity": javasecurity.NewJavaSecurityPlugin,
 		"secrets":      secrets.NewSecretsPlugin,
 		"keys":         keys.NewKeysPlugin,
+		"vex":          vex.NewVEXPlugin,
 	}
 }
 
