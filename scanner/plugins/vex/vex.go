@@ -64,9 +64,13 @@ func (p *VEXPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 
 	// Process each component
 	for i, component := range *bom.Components {
+		log.WithField("component", component.Name).
+			WithField("type", component.Type).
+			Info("Checking component for crypto assets")
+			
 		// Only process components with cryptographic assets (as an example)
 		if containsCryptoAsset(component) {
-			log.WithField("component", component.Name).Debug("Adding VEX statement for cryptographic component")
+			log.WithField("component", component.Name).Info("Adding VEX statement for cryptographic component")
 
 			// Create a vulnerability ID based on the component
 			vulnID := fmt.Sprintf("CRYPTO-%s", sanitizeComponentName(component.Name))
@@ -113,10 +117,23 @@ func sanitizeComponentName(name string) string {
 // Helper function to check if a component contains cryptographic assets
 func containsCryptoAsset(component cdx.Component) bool {
 	// In a real implementation, this would be more sophisticated
-	// For now, we'll just check if the component's type contains "crypto" or specific keywords
+	// For now, we'll check multiple indicators that this is a crypto component
 	
 	// Check component type
-	if component.Type == "crypto" || component.Type == "certificate" || component.Type == "key" {
+	if component.Type == "crypto" || component.Type == "certificate" || component.Type == "key" || 
+	   component.Type == "cryptographic-asset" {
+		return true
+	}
+	
+	// Check component name for crypto keywords
+	name := component.Name
+	if name == "SHA256" || name == "SHA256-RSA" || name == "RSA" || 
+	   name == "AES" || name == "certificate" || name == "private-key" {
+		return true
+	}
+	
+	// Check if component has cryptoProperties
+	if component.CryptoProperties != nil {
 		return true
 	}
 	
