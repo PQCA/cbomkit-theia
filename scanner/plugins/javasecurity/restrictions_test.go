@@ -23,9 +23,17 @@ import (
 
 func TestEvaluation(t *testing.T) {
 	t.Run("Extracting TLS Rules from security file", func(t *testing.T) {
-		component := cyclonedx.Component{Name: "RSA-2048", CryptoProperties: &cyclonedx.CryptoProperties{AssetType: cyclonedx.CryptoAssetTypeAlgorithm}}
+		component := cyclonedx.Component{
+			Name: "RSA",
+			CryptoProperties: &cyclonedx.CryptoProperties{
+				AssetType: cyclonedx.CryptoAssetTypeAlgorithm,
+				AlgorithmProperties: &cyclonedx.CryptoAlgorithmProperties{
+					ParameterSetIdentifier: "2048",
+				},
+			},
+		}
 		algorithmRestriction := AlgorithmRestriction{"RSA", keySizeOperatorGreater, 2048}
-		confidenceLevel, err := algorithmRestriction.evaluate(component)
+		confidenceLevel, err := algorithmRestriction.allowed(component)
 		if err != nil {
 			t.Fatal(err)
 		}

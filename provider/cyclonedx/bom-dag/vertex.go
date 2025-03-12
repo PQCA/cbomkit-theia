@@ -18,6 +18,7 @@ package bomdag
 
 import (
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	"github.com/IBM/cbomkit-theia/utils"
 	"github.com/dominikbraun/graph"
 )
 
@@ -41,7 +42,7 @@ func hashBOMDAGVertex(bomDAGVertex bomDAGVertex) VertexHash {
 	case bomDAGVertexTypeRoot:
 		return VertexHash{0}
 	case bomDAGVertexTypeOccurrence:
-		return cyclonedx.Struct8Byte(bomDAGVertex.(vertexOccurrence))
+		return utils.Struct8Byte(bomDAGVertex.(vertexOccurrence))
 	default:
 		panic("Unsupported BOM DAG Vertex Type!")
 	}

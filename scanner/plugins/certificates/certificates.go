@@ -20,7 +20,7 @@ import (
 	"encoding/pem"
 	"errors"
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
-	"log/slog"
+	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
 	"slices"
@@ -65,7 +65,7 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 	// Set GODEBUG to allow negative serial numbers (see https://github.com/golang/go/commit/db13584baedce4909915cb4631555f6dbd7b8c38)
 	err := setX509NegativeSerial()
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error(err.Error())
 	}
 
 	err = fs.WalkDir(
@@ -113,23 +113,24 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 	// Set GODEBUG to old setting
 	err = removeX509NegativeSerial()
 	if err != nil {
-		slog.Error(err.Error())
+		log.Error(err.Error())
 	}
 
-	slog.Debug("Certificate searching done", "count", len(certificates))
+	log.WithField("numberOfDetectedCertificates", len(certificates)).Info("Certificate searching done")
 
 	dag := bomdag.NewBomDAG()
 
 	for _, cert := range certificates {
 		certDAG, err := cert.generateDAG()
+
 		if errors.Is(err, errX509UnknownAlgorithm) {
-			slog.Info("X.509 certs contained unknown algorithms. Continuing anyway", "errors", err)
+			log.WithError(err).Error(" X.509 certs contained unknown algorithms; continuing")
 		} else if err != nil {
 			return err
 		}
 
 		if err := dag.Merge(certDAG); err != nil {
-			slog.Error("Merging of DAGs failed", "certificate path", cert.path)
+			log.WithField("certificate path", cert.path).Error("Merging of DAGs failed")
 			return err
 		}
 	}

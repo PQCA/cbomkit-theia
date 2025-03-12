@@ -20,7 +20,6 @@ import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
 	"io"
-	"log/slog"
 	"os"
 	"slices"
 	"time"
@@ -120,7 +119,7 @@ type scanner struct {
 func (scanner *scanner) scan(bom *cdx.BOM, fs filesystem.Filesystem) (*cdx.BOM, error) {
 	var err error
 	if bom.Components == nil {
-		log.Warn("BOM does not have any components, this scan will only add components")
+		log.Warn("No BOM provided or provided BOM does not have any components, this scan will only add components")
 		bom.Components = new([]cdx.Component)
 	}
 
@@ -141,7 +140,7 @@ func (scanner *scanner) scan(bom *cdx.BOM, fs filesystem.Filesystem) (*cdx.BOM, 
 
 // Create a new scanner object for the specific filesystem
 func newScanner(plugins []pluginpackage.Plugin) scanner {
-	slog.Debug("Initializing a new scanner", "plugins", pluginpackage.PluginSliceToString(plugins))
+	log.WithField("plugins", pluginpackage.PluginSliceToString(plugins)).Debug("Initializing a new scanner")
 	return scanner{
 		configPlugins: plugins,
 	}

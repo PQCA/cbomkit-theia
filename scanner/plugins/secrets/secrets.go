@@ -80,7 +80,7 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 
 		content, err := filesystem.ReadAllAndClose(readCloser)
 		if err != nil {
-			log.Warn("Unable to read file ", path)
+			log.WithField("path", path).Warn("Unable to read file")
 			return nil
 		}
 
@@ -95,11 +95,14 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 				mime:    strings.Split(mime.String(), ";")[0],
 				raw:     content,
 			})
-			log.Info(finding.Description, " detected")
+			log.WithFields(log.Fields{
+				"type": finding.RuleID,
+				"file": finding.File,
+			}).Info("Secret detected")
 		}
 		return nil
 	}); err != nil {
-		log.Error("Error while trying to scan for secrets: ", err)
+		log.WithError(err).Error("Error while trying to scan for secrets")
 		return err
 	}
 
@@ -113,7 +116,7 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	for _, finding := range findings {
 		currentComponents, err := finding.getComponents()
 		if err != nil {
-			log.Warn("Could transfer finding to cyclondx component: ", err)
+			log.WithError(err).Warn("Could not add secret finding to BOM component")
 			continue
 		}
 		components = append(components, currentComponents...)

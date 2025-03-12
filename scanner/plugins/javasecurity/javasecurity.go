@@ -17,10 +17,8 @@
 package javasecurity
 
 import (
-	goerrors "errors"
 	"fmt"
-	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
-	"log/slog"
+	log "github.com/sirupsen/logrus"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -60,16 +58,18 @@ func (*Plugin) GetType() plugins.PluginType {
 // UpdateBOM High-level function to update a list of components
 // (e.g., remove components and add new ones) based on the underlying filesystem
 func (plugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
-	slog.Warn("java.security: current version does not take dynamic changes of java javaSecurity properties (e.g. via System.setProperty) into account.")
+	log.Warn("Current version does not take dynamic changes of java javaSecurity properties (e.g. via System.setProperty) into account.")
 	javaSecurityFiles, err := plugin.findJavaSecurityFiles(fs)
 	if err != nil {
 		return err
 	}
 
 	if len(javaSecurityFiles) == 0 {
-		slog.Warn("java.security: no java.javaSecurity files detected.")
+		log.Warn("No java.security file found")
 		return nil
 	}
+
+	log.WithField("number", len(javaSecurityFiles)).Info("java.security files found")
 
 	var javaSecurityFile *JavaSecurity
 	if dockerConfig, ok := fs.GetConfig(); ok {
@@ -78,43 +78,20 @@ func (plugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		javaSecurityFile = plugin.selectJavaSecurityFile(javaSecurityFiles, nil)
 	}
 
-	// log java.security file
-	slog.Debug("java.security:", "content", javaSecurityFile.properties.String())
-
 	err = javaSecurityFile.analyse(fs)
 	if err != nil {
-		slog.Error("java.security: could not analyse java.security file", "error", err)
+		log.WithError(err).Error("Could not analyse java.security file")
 		return err
 	}
 
-	var insufficientInformationErrors []error
-	components := cyclonedx.Transform(*bom.Components)
-	for _, component := range components.Components {
-		if component.Component.Type != cdx.ComponentTypeCryptographicAsset {
-			continue
-		}
-		if component.Component.CryptoProperties == nil {
-			slog.Warn("java.security: component is a cryptographic asset but has empty properties", "component", component.Component.Name)
-			continue
-		}
-
-		err := javaSecurityFile.updateComponent(component, components)
+	for _, component := range *bom.Components {
+		err := javaSecurityFile.updateComponent(component, bom.Components)
 		if err != nil {
-			if goerrors.Is(err, scannererrors.ErrInsufficientInformation) {
-				insufficientInformationErrors = append(insufficientInformationErrors, err)
-			} else {
-				return fmt.Errorf("java.security: error while updating component %v\n%w", component.Component.Name, err)
-			}
+			log.WithError(err).Error("Error while updating component %v\n%w", component.Name)
+			continue
 		}
 	}
-	// errors
-	joinedInsufficientInformationErrors := goerrors.Join(insufficientInformationErrors...)
-	if joinedInsufficientInformationErrors != nil {
-		slog.Warn("java.security: analysis finished with insufficient information errors", "errors", goerrors.Join(insufficientInformationErrors...).Error())
-	}
-
-	*bom.Components = components.GetComponentSlice()
-	slog.Info("java.security: analysis done!")
+	log.Info("java.security analysis done!")
 	return nil
 }
 
@@ -138,12 +115,13 @@ func (plugin *Plugin) findJavaSecurityFiles(fs filesystem.Filesystem) ([]JavaSec
 				if config == nil {
 					return fmt.Errorf("java.security: there are no java.security properties")
 				}
-				slog.Info("java.security: file found", "path", path)
+
+				log.WithField("path", path).Debug("java.security file found")
 				javaSecurityFiles = append(javaSecurityFiles, New(*config, path))
 			}
 			return nil
 		}); err != nil {
-		slog.Error("java.security: error while trying to find java.security files", "error", err)
+		log.WithError(err).Error("Error while trying to find java.security files")
 		return nil, err
 	}
 	return javaSecurityFiles, nil
@@ -160,7 +138,7 @@ func (plugin *Plugin) selectJavaSecurityFile(javaSecurityFiles []JavaSecurity, d
 	}
 	for _, file := range javaSecurityFiles {
 		if strings.HasPrefix(file.path, jdkPath) {
-			slog.Info("java.security: selected java.security file", "path", file.path)
+			log.WithField("path", file.path).Info("Select java.security file")
 			return &file
 		}
 	}
@@ -170,7 +148,7 @@ func (plugin *Plugin) selectJavaSecurityFile(javaSecurityFiles []JavaSecurity, d
 // Choose the first one
 func (*Plugin) chooseFirstConfiguration(javaSecurityFiles []JavaSecurity) *JavaSecurity {
 	for _, file := range javaSecurityFiles {
-		slog.Info("java.security: selected java.security file", "path", file.path)
+		log.WithField("path", file.path).Info("Select java.security file")
 		return &file
 	}
 	return nil
@@ -282,11 +260,15 @@ func (javaSecurity *JavaSecurity) analyse(fs filesystem.Filesystem) error {
 func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool, error) {
 	if component.Evidence == nil || component.Evidence.Occurrences == nil { // If there is no evidence telling us that whether this component comes from a java file,
 		// we cannot assess it
-		return false, scannererrors.GetInsufficientInformationError("java.security: cannot evaluate due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
+		return false, scannererrors.GetInsufficientInformationError("Cannot allowed due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
 	}
 
 	for _, occurrence := range *component.Evidence.Occurrences {
 		if filepath.Ext(occurrence.Location) == ".java" {
+			log.WithFields(log.Fields{
+				"component": component.Name,
+				"bom-ref":   component.BOMRef,
+			}).Debug("component is effected")
 			return true, nil
 		}
 	}
@@ -294,51 +276,22 @@ func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool,
 }
 
 // Update a single component; returns nil if component is not allowed
-func (javaSecurity *JavaSecurity) updateComponent(component cyclonedx.ComponentWithConfidence, components *cyclonedx.ComponentsWithConfidenceSlice) error {
-	ok, err := javaSecurity.isComponentAffectedByConfig(*component.Component)
+func (javaSecurity *JavaSecurity) updateComponent(component cdx.Component, components *[]cdx.Component) error {
+	ok, err := javaSecurity.isComponentAffectedByConfig(component)
 	if !ok {
 		return err
 	}
-
-	assetType := component.Component.CryptoProperties.AssetType
-	switch assetType {
-	case cdx.CryptoAssetTypeProtocol:
-		return javaSecurity.updateProtocolComponent(component, components)
-	default:
-		return nil
+	allowed, restrictionResult, err := isAllowed(component, components, javaSecurity)
+	if err != nil {
+		return err
 	}
-}
-
-// High-Level function to update a protocol component based on the restriction in the JavaSecurity object
-// Returns nil if the updateComponent is not allowed
-func (javaSecurity *JavaSecurity) updateProtocolComponent(component cyclonedx.ComponentWithConfidence, components *cyclonedx.ComponentsWithConfidenceSlice) error {
-	if component.Component.CryptoProperties.AssetType != cdx.CryptoAssetTypeProtocol {
-		return fmt.Errorf("scanner java: component of type %v cannot be used in function updateProtocolComponent", component.Component.CryptoProperties.AssetType)
-	}
-
-	switch component.Component.CryptoProperties.ProtocolProperties.Type {
-	case cdx.CryptoProtocolTypeTLS:
-		for _, cipherSuites := range *component.Component.CryptoProperties.ProtocolProperties.CipherSuites {
-			// Test the protocol itself
-			cipherSuiteConfidenceLevel, err := evaluateRestrictions(javaSecurity.tlsDisabledAlgorithms, *component.Component)
-			if err != nil {
-				return err
-			}
-
-			// Test all algorithms in the protocol
-			for _, algorithmRef := range *cipherSuites.Algorithms {
-				algo, ok := components.GetByRef(algorithmRef)
-				if ok {
-					algoConfidenceLevel, err := evaluateRestrictions(javaSecurity.tlsDisabledAlgorithms, *algo.Component)
-					if err != nil {
-						return err
-					}
-					algo.Confidence.AddSubConfidenceLevel(algoConfidenceLevel, false)
-					cipherSuiteConfidenceLevel.AddSubConfidenceLevel(algoConfidenceLevel, true)
-				}
-			}
-			component.Confidence.AddSubConfidenceLevel(cipherSuiteConfidenceLevel, false)
-			slog.Debug("Protocol component updated", "component", component.Component.Name)
+	// component has restrictions
+	if !allowed && restrictionResult != nil {
+		for _, result := range *restrictionResult {
+			*component.Properties = append(*component.Properties, cdx.Property{
+				Name:  fmt.Sprintf("ibm:algorithm_restriction"),
+				Value: fmt.Sprintf("%+v", result),
+			})
 		}
 	}
 	return nil
@@ -360,7 +313,7 @@ func (javaSecurity *JavaSecurity) extractValuesForKey(key string) (values []stri
 // Parses the TLS Rules from the java.security file
 // Returns a joined list of errors which occurred during parsing of algorithms
 func (javaSecurity *JavaSecurity) extractTLSRules() ([]AlgorithmRestriction, error) {
-	slog.Debug("java.security: extracting TLS rules from")
+	log.WithField("path", javaSecurity.path).Debug("Extracting TLS rules from java.security file")
 
 	algorithms, err := javaSecurity.extractValuesForKey("jdk.tls.disabledAlgorithms")
 	if err != nil {
@@ -380,14 +333,19 @@ func (javaSecurity *JavaSecurity) extractTLSRules() ([]AlgorithmRestriction, err
 		if strings.Contains(algorithm, "jdkCA") ||
 			strings.Contains(algorithm, "denyAfter") ||
 			strings.Contains(algorithm, "usage") {
-			slog.Warn("java.security: found constraint in java.security that is not supported in this version: ", "algorithm=", algorithm)
+			log.WithField("algorithm", algorithm).Warn("Found constraint in java.security file that is not supported in this version")
 			continue
 		}
+
+		log.WithFields(log.Fields{
+			"algorithm": algorithm,
+			"property":  "jdk.tls.disabledAlgorithms",
+		}).Debug("Found constraint in java.security file")
 
 		if strings.Contains(algorithm, "keySize") {
 			split := strings.Split(algorithm, "keySize")
 			if len(split) > 2 {
-				slog.Warn(fmt.Sprintf("java.security: keySize check failed; too many elements (%v)", algorithm))
+				log.WithField("algorithm", algorithm).Warn("key size check failed; too many elements")
 				continue
 			}
 			name = strings.TrimSpace(split[0])
@@ -410,13 +368,16 @@ func (javaSecurity *JavaSecurity) extractTLSRules() ([]AlgorithmRestriction, err
 			case "":
 				operator = keySizeOperatorNone
 			default:
-				slog.Warn(fmt.Sprintf("java.security: could not analyse the following keySizeOperator %v (%v)", keyRestrictions[0], algorithm))
+				log.WithFields(log.Fields{
+					"algorithm":       algorithm,
+					"keySizeOperator": keyRestrictions[0],
+				}).Warn("Could not analyse the keySizeOperator")
 				continue
 			}
 
 			keySize, err = strconv.Atoi(keyRestrictions[1])
 			if err != nil {
-				slog.Warn(fmt.Sprintf("java.security: could dnot extraxt keysize (%v)", algorithm))
+				log.WithField("algorithm", algorithm).Warn("Could not extract key size")
 				continue
 			}
 		}
@@ -432,10 +393,11 @@ func (javaSecurity *JavaSecurity) extractTLSRules() ([]AlgorithmRestriction, err
 
 // Tries to get a config from the fs and checks the Config for potentially relevant information
 func (javaSecurity *JavaSecurity) checkForEnvironmentConfigurations(fs filesystem.Filesystem) (*properties.Properties, bool, error) {
-	slog.Debug("java.security: checking filesystem config for additional security properties")
+	log.WithField("filesystem", fs.GetIdentifier()).Debug("Checking filesystem configuration for additional java.security properties")
+
 	configuration, ok := fs.GetConfig()
 	if !ok {
-		slog.Debug("java.security: filesystem did not provide a config", "fs", fs.GetIdentifier())
+		log.WithField("filesystem", fs.GetIdentifier()).Debug("Filesystem did not provide a configuration")
 		return nil, false, nil
 	}
 	additionalSecurityProperties, overridden, err := javaSecurity.checkForAdditionalSecurityFilesInDockerConfig(configuration, fs)
@@ -447,7 +409,7 @@ func (javaSecurity *JavaSecurity) checkForAdditionalSecurityFilesInDockerConfig(
 	// We have to check if adding additional security files via CMD is even allowed via the java.security file (security.overridePropertiesFile property)
 	overridePropertiesFile := javaSecurity.properties.GetBool("security.overridePropertiesFile", true)
 	if !overridePropertiesFile {
-		slog.Debug("java.security: properties don't allow additional security files. Stopping searching directly.", "fs", fs.GetIdentifier())
+		log.WithField("filesystem", fs.GetIdentifier()).Debug("java.security file properties don't allow additional security files. Stopping searching directly")
 		return nil, false, nil
 	}
 
@@ -458,15 +420,15 @@ func (javaSecurity *JavaSecurity) checkForAdditionalSecurityFilesInDockerConfig(
 		if !ok {
 			continue
 		}
-		slog.Debug("java.security: found command that specifies new properties", "command", command)
+		log.WithField("command", command).Debug("Found command that specifies new properties")
 		readCloser, err := fs.Open(value)
 		if err != nil {
-			slog.Warn("java.security: failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
+			log.WithField("file", value).Warn("Failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without")
 			continue
 		}
 		content, err := filesystem.ReadAllAndClose(readCloser)
 		if err != nil {
-			slog.Warn("java.security: failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without adding it.", "file", value)
+			log.WithField("file", value).Warn("Failed to read file specified via a command flag in the image configuration (e.g. Dockerfile); the image or image config is probably malformed; continuing without")
 			continue
 		}
 		additionalSecurityProperties, err := properties.LoadString(string(content))
