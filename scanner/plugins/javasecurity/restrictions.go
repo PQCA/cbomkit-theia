@@ -19,8 +19,9 @@ package javasecurity
 import (
 	"fmt"
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	"github.com/IBM/cbomkit-theia/scanner/confidenceLevel"
 	"github.com/IBM/cbomkit-theia/utils"
-	"log/slog"
+	log "github.com/sirupsen/logrus"
 	"strconv"
 	"strings"
 
@@ -31,7 +32,7 @@ import (
 
 // AlgorithmRestriction Represents a single restriction on algorithms by the java.security file
 type AlgorithmRestriction struct {
-	name            string
+	algorithm       string
 	keySizeOperator keySizeOperator
 	keySize         int
 }
@@ -50,15 +51,19 @@ const (
 )
 
 type RestrictionResult struct {
-	target string
-	reason string
+	target      string
+	restriction AlgorithmRestriction
+	reason      string
+	confidence  confidenceLevel.ConfidenceLevel // how confident are we that this algorithm is restricted by the given rule
 }
 
 // Evaluates all AlgorithmRestriction for a component
-func isAllowed(component cdx.Component, components *[]cdx.Component, javaSecurity *JavaSecurity) (bool, *[]RestrictionResult, error) {
+func isAllowed(component *cdx.Component, components *[]cdx.Component, javaSecurity *JavaSecurity) (bool, *[]RestrictionResult, error) {
 	if javaSecurity == nil {
 		return true, nil, fmt.Errorf("no java.security file provided")
 	}
+
+	// only check for tls restrictions here
 
 	if len(javaSecurity.tlsDisabledAlgorithms) == 0 {
 		return true, nil, fmt.Errorf("no restrictions found in java.security file")
@@ -77,24 +82,44 @@ func isAllowed(component cdx.Component, components *[]cdx.Component, javaSecurit
 	case cdx.CryptoAssetTypeProtocol:
 		return updateProtocolComponent(component, components, javaSecurity.tlsDisabledAlgorithms)
 	case cdx.CryptoAssetTypeAlgorithm:
-		slog.Info("")
+		return updateAlgorithmComponent(component, components, javaSecurity.tlsDisabledAlgorithms)
 	}
 	return true, nil, nil
 }
 
-func updateProtocolComponent(component cdx.Component, components *[]cdx.Component, algorithmRestrictions []AlgorithmRestriction) (bool, *[]RestrictionResult, error) {
+func updateProtocolComponent(component *cdx.Component, components *[]cdx.Component, algorithmRestrictions []AlgorithmRestriction) (bool, *[]RestrictionResult, error) {
 	if component.CryptoProperties.ProtocolProperties == nil {
 		return true, nil, fmt.Errorf("component has not enough information (protocolProperties)")
 	}
 
-	switch component.CryptoProperties.ProtocolProperties.Type {
-	case cdx.CryptoProtocolTypeTLS:
+	if component.CryptoProperties.ProtocolProperties.Type == cdx.CryptoProtocolTypeTLS {
 		return updateTLSComponent(component, components, algorithmRestrictions)
 	}
 	return true, nil, nil
 }
 
-func updateTLSComponent(component cdx.Component, components *[]cdx.Component, algorithmRestrictions []AlgorithmRestriction) (bool, *[]RestrictionResult, error) {
+func updateAlgorithmComponent(component *cdx.Component, components *[]cdx.Component, algorithmRestrictions []AlgorithmRestriction) (bool, *[]RestrictionResult, error) {
+	var restrictionResults []RestrictionResult
+	for _, algorithmRestriction := range algorithmRestrictions {
+		allowed, err := algorithmRestriction.allowed(component)
+		if err != nil {
+			log.WithError(err).Error("An error occurred when trying to validate restriction")
+			continue
+		}
+
+		if !allowed {
+			restrictionResults = append(restrictionResults, RestrictionResult{
+				target:      component.Name,
+				restriction: algorithmRestriction,
+				reason:      "The algorithm is restricted for TLS usage, but not for other purposes",
+				confidence:  confidenceLevel.New(0.5),
+			})
+		}
+	}
+	return len(restrictionResults) == 0, &restrictionResults, nil
+}
+
+func updateTLSComponent(component *cdx.Component, components *[]cdx.Component, algorithmRestrictions []AlgorithmRestriction) (bool, *[]RestrictionResult, error) {
 	if component.CryptoProperties.ProtocolProperties.CipherSuites == nil {
 		return true, nil, fmt.Errorf("component has not enough information (cipherSuites)")
 	}
@@ -104,14 +129,16 @@ func updateTLSComponent(component cdx.Component, components *[]cdx.Component, al
 		for _, algorithmRestriction := range algorithmRestrictions {
 			allowed, err := algorithmRestriction.allowed(component)
 			if err != nil {
-				slog.Debug(err.Error())
+				log.WithError(err).Error("An error occurred when trying to validate restriction")
 				continue
 			}
 
 			if !allowed {
 				restrictionResults = append(restrictionResults, RestrictionResult{
-					target: cipherSuite.Name,
-					reason: fmt.Sprintf("%v", algorithmRestriction),
+					target:      cipherSuite.Name,
+					restriction: algorithmRestriction,
+					reason:      "The cipher suite uses an algorithm which is restricted for TLS usage",
+					confidence:  confidenceLevel.Max,
 				})
 			}
 		}
@@ -124,27 +151,35 @@ func updateTLSComponent(component cdx.Component, components *[]cdx.Component, al
 			}
 
 			for _, algorithmRestriction := range algorithmRestrictions {
-				allowed, err := algorithmRestriction.allowed(*algorithmComponent)
+				allowed, err := algorithmRestriction.allowed(algorithmComponent)
 				if err != nil {
-					slog.Debug(err.Error())
+					log.WithError(err).Error("An error occurred when trying to validate restriction")
 					continue
 				}
 
 				if !allowed {
 					restrictionResults = append(restrictionResults, RestrictionResult{
-						target: algorithmComponent.Name,
-						reason: fmt.Sprintf("%v", algorithmRestriction),
+						target:      algorithmComponent.Name,
+						restriction: algorithmRestriction,
+						reason:      "The algorithm is restricted for TLS usage",
+						confidence:  confidenceLevel.Max,
 					})
 				}
 			}
 		}
 	}
-	return true, &restrictionResults, nil
+	return len(restrictionResults) == 0, &restrictionResults, nil
 }
 
 // Evaluates if a single component is allowed based on a single restriction; returns true if the component is allowed, false otherwise;
-func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component cdx.Component) (bool, error) {
-	slog.Debug("evaluating component with restriction", "component", component.Name, "restriction_name", javaSecurityAlgorithmRestriction.name, "restriction_operator", javaSecurityAlgorithmRestriction.keySizeOperator, "restriction_value", javaSecurityAlgorithmRestriction.keySize)
+func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component *cdx.Component) (bool, error) {
+	log.WithFields(log.Fields{
+		"component":           component.Name,
+		"bom-ref":             component.BOMRef,
+		"restrictedAlgorithm": javaSecurityAlgorithmRestriction.algorithm,
+		"restrictionOperator": javaSecurityAlgorithmRestriction.keySizeOperator,
+		"restriction_value":   javaSecurityAlgorithmRestriction.keySize,
+	}).Debug("Evaluating component with restriction")
 
 	if component.CryptoProperties == nil {
 		return false, fmt.Errorf("cannot allow components other than algorithm or protocol for applying restrictions")
@@ -162,22 +197,22 @@ func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component c
 	replacer := strings.NewReplacer("with", " ", "and", " ")
 	subAlgorithms := strings.Fields(replacer.Replace(component.Name))
 
-	// Also need to test the full name
+	// Also need to test the full algorithm
 	if len(subAlgorithms) > 1 {
 		subAlgorithms = append(subAlgorithms, component.Name)
 	}
 
 	for _, subAlgorithm := range subAlgorithms {
-		restrictionStandardized, subAlgorithmStandardized := utils.StandardizeString(javaSecurityAlgorithmRestriction.name), utils.StandardizeString(subAlgorithm)
+		restrictionStandardized, subAlgorithmStandardized := utils.StandardizeString(javaSecurityAlgorithmRestriction.algorithm), utils.StandardizeString(subAlgorithm)
 		if strings.EqualFold(restrictionStandardized, subAlgorithmStandardized) {
 			if component.CryptoProperties.AlgorithmProperties == nil {
-				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing algorithm properties in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.name), "java.security", "component", component.Name)
+				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing algorithm properties in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), "java.security", "component", component.Name)
 			}
 
 			// There is no need to test further if the component does not provide a keySize
 			if component.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier == "" {
 				if javaSecurityAlgorithmRestriction.keySizeOperator != keySizeOperatorNone {
-					return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.name), "java.security", "component", component.Name) // We actually need a keySize so we cannot go on here
+					return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), "java.security", "component", component.Name) // We actually need a keySize so we cannot go on here
 				} else {
 					return false, nil // Names match, and we do not need a keySize --> The algorithm is not allowed!
 				}
@@ -186,7 +221,7 @@ func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component c
 			// Parsing the key size
 			param, err := strconv.Atoi(component.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier)
 			if err != nil {
-				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.name), "java.security", "component", component.Name) // We actually need a keySize so we cannot go on here
+				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), "java.security", "component", component.Name) // We actually need a keySize so we cannot go on here
 			}
 
 			if param <= 0 || param > 2147483647 {
@@ -195,30 +230,30 @@ func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component c
 				return false, fmt.Errorf("key size not in the limits: %d", param)
 			}
 
-			var allowed bool
+			var forbidden bool
 			switch javaSecurityAlgorithmRestriction.keySizeOperator {
 			case keySizeOperatorLowerEqual:
-				allowed = param <= javaSecurityAlgorithmRestriction.keySize
+				forbidden = param <= javaSecurityAlgorithmRestriction.keySize
 			case keySizeOperatorLower:
-				allowed = param < javaSecurityAlgorithmRestriction.keySize
+				forbidden = param < javaSecurityAlgorithmRestriction.keySize
 			case keySizeOperatorEqual:
-				allowed = param == javaSecurityAlgorithmRestriction.keySize
+				forbidden = param == javaSecurityAlgorithmRestriction.keySize
 			case keySizeOperatorNotEqual:
-				allowed = param != javaSecurityAlgorithmRestriction.keySize
+				forbidden = param != javaSecurityAlgorithmRestriction.keySize
 			case keySizeOperatorGreaterEqual:
-				allowed = param >= javaSecurityAlgorithmRestriction.keySize
+				forbidden = param >= javaSecurityAlgorithmRestriction.keySize
 			case keySizeOperatorGreater:
-				allowed = param > javaSecurityAlgorithmRestriction.keySize
+				forbidden = param > javaSecurityAlgorithmRestriction.keySize
 			case keySizeOperatorNone:
-				allowed = false
+				forbidden = true
 			default:
-				return false, fmt.Errorf("invalid keySizeOperator in JavaSecurityAlgorithmRestriction: %v", javaSecurityAlgorithmRestriction.keySizeOperator)
+				return true, fmt.Errorf("invalid key size operator in java.security %v", javaSecurityAlgorithmRestriction.keySizeOperator)
 			}
 
-			if allowed {
-				return true, nil
+			if forbidden {
+				return false, nil
 			}
 		}
 	}
-	return false, nil
+	return true, nil
 }

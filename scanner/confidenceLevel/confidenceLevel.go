@@ -26,80 +26,31 @@ import (
 // Example:
 // A ConfidenceLevel could be used to represent the confidence that an algorithm is executable in a certain environment.
 type ConfidenceLevel struct {
-	count int
-	sum   int
-	value int
+	value float64
 }
 
-// Modifier ConfidenceLevelModifier Modifiers for the ConfidenceLevel
-type Modifier int
-
 // Constant value that can be used for the modification of a ConfidenceLevel
-const (
-	confidenceLevelMax              = 100
-	confidenceLevelDefault          = 50
-	confidenceLevelMin              = 0
-	PositiveExtreme        Modifier = 50
-	PositiveHigh           Modifier = 30
-	PositiveMedium         Modifier = 15
-	PositiveLow            Modifier = 5
-	NegativeExtreme        Modifier = -50
-	NegativeHigh           Modifier = -30
-	NegativeMedium         Modifier = -15
-	NegativeLow            Modifier = -5
+var (
+	Max = New(1.0)
+	Min = New(0.0)
 )
 
 // New Get a new ConfidenceLevel; default value is confidenceLevelDefault
-func New() *ConfidenceLevel {
-	return &ConfidenceLevel{
-		count: 0,
-		sum:   0,
-		value: confidenceLevelDefault,
+func New(value float64) ConfidenceLevel {
+	return ConfidenceLevel{
+		value: value,
 	}
 }
 
 // GetValue Get the value of the ConfidenceLevel
-func (confidenceLevel *ConfidenceLevel) GetValue() int {
+func (confidenceLevel ConfidenceLevel) GetValue() float64 {
 	return confidenceLevel.value
 }
 
 // GetProperty Generate a CycloneDX component property from this confidence
-func (confidenceLevel *ConfidenceLevel) GetProperty() cdx.Property {
+func (confidenceLevel ConfidenceLevel) GetProperty() cdx.Property {
 	return cdx.Property{
-		Name:  "confidence_level",
+		Name:  "confidenceLevel",
 		Value: fmt.Sprint(confidenceLevel.value),
 	}
-}
-
-// Modify the confidence level using one of the predefined ConfidenceLevelModifier values
-func (confidenceLevel *ConfidenceLevel) Modify(modifier Modifier) {
-	confidenceLevel.value += int(modifier)
-
-	if confidenceLevel.value < confidenceLevelMin {
-		confidenceLevel.value = confidenceLevelMin
-	} else if confidenceLevel.value > confidenceLevelMax {
-		confidenceLevel.value = confidenceLevelMax
-	}
-}
-
-/*
-	Sets the value of this ConfidenceLevel to the average of all sub ConfidenceLevels; set ignoreDefaultConfidence to ignore sub ConfidenceLevels with value confidenceLevelDefault
-
-Example:
-
-	a, b, c := New(), New(),  New()
-	a.AddSubConfidenceLevel(b, false)
-	a.AddSubConfidenceLevel(c, false)
-
-Now a.GetValue() returns the average of b.GetValue() and c.GetValue(). (a.value = (b.value+c.value)/2)
-
-Warning: a, b and c are not permanently linked by this. AddSubConfidenceLevel just calculates the average once this function is called
-*/
-func (confidenceLevel *ConfidenceLevel) AddSubConfidenceLevel(sub *ConfidenceLevel, ignoreDefaultConfidence bool) {
-	if ignoreDefaultConfidence && sub.value == confidenceLevelDefault {
-		return
-	}
-	confidenceLevel.count++
-	confidenceLevel.sum += sub.value
-	confidenceLevel.value = confidenceLevel.sum / confidenceLevel.count
 }

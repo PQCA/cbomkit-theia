@@ -81,7 +81,7 @@ func prepareImageAndRun(image docker.ActiveImage) error {
 	}
 
 	if err := container.Provide(func() string {
-		return viper.GetString("bom")
+		return bomFilePath
 	}, dig.Name("bomFilePath")); err != nil {
 		return err
 	}

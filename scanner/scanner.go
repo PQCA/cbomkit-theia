@@ -77,6 +77,7 @@ func GetPluginConstructorsFromNames(names []string) ([]pluginpackage.PluginConst
 func ReadFilesAndRunScan(params ParameterStruct) error {
 	var bom *cdx.BOM
 	if params.BomFilePath != "" {
+		log.WithField("path", params.BomFilePath).Debug("bom provided")
 		bomReader, err := os.Open(params.BomFilePath)
 		if err != nil {
 			return err

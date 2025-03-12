@@ -41,7 +41,7 @@ func NewJavaSecurityPlugin() (plugins.Plugin, error) {
 	return &Plugin{}, nil
 }
 
-// GetName Get the name of the plugin for debugging purposes
+// GetName Get the algorithm of the plugin for debugging purposes
 func (*Plugin) GetName() string {
 	return "java.security Plugin"
 }
@@ -85,9 +85,9 @@ func (plugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	}
 
 	for _, component := range *bom.Components {
-		err := javaSecurityFile.updateComponent(component, bom.Components)
+		err := javaSecurityFile.updateComponent(&component, bom.Components)
 		if err != nil {
-			log.WithError(err).Error("Error while updating component %v\n%w", component.Name)
+			log.WithError(err).Errorf("Error while updating component %v\n", component.Name)
 			continue
 		}
 	}
@@ -257,7 +257,7 @@ func (javaSecurity *JavaSecurity) analyse(fs filesystem.Filesystem) error {
 
 // Assesses if the component is from a source affected by this type of config (e.g., a java file),
 // requires "Evidence" and "Occurrences" to be present in the BOM
-func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool, error) {
+func (*JavaSecurity) isComponentAffectedByConfig(component *cdx.Component) (bool, error) {
 	if component.Evidence == nil || component.Evidence.Occurrences == nil { // If there is no evidence telling us that whether this component comes from a java file,
 		// we cannot assess it
 		return false, scannererrors.GetInsufficientInformationError("Cannot allowed due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
@@ -265,10 +265,6 @@ func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool,
 
 	for _, occurrence := range *component.Evidence.Occurrences {
 		if filepath.Ext(occurrence.Location) == ".java" {
-			log.WithFields(log.Fields{
-				"component": component.Name,
-				"bom-ref":   component.BOMRef,
-			}).Debug("component is effected")
 			return true, nil
 		}
 	}
@@ -276,24 +272,50 @@ func (*JavaSecurity) isComponentAffectedByConfig(component cdx.Component) (bool,
 }
 
 // Update a single component; returns nil if component is not allowed
-func (javaSecurity *JavaSecurity) updateComponent(component cdx.Component, components *[]cdx.Component) error {
+func (javaSecurity *JavaSecurity) updateComponent(component *cdx.Component, components *[]cdx.Component) error {
 	ok, err := javaSecurity.isComponentAffectedByConfig(component)
 	if !ok {
 		return err
 	}
+
+	log.WithFields(log.Fields{
+		"component": component.Name,
+		"bom-ref":   component.BOMRef,
+	}).Debug("component is effect by java.security file")
+
 	allowed, restrictionResult, err := isAllowed(component, components, javaSecurity)
 	if err != nil {
 		return err
 	}
 	// component has restrictions
-	if !allowed && restrictionResult != nil {
-		for _, result := range *restrictionResult {
-			*component.Properties = append(*component.Properties, cdx.Property{
-				Name:  fmt.Sprintf("ibm:algorithm_restriction"),
-				Value: fmt.Sprintf("%+v", result),
-			})
-		}
+	if allowed {
+		return nil
 	}
+
+	if restrictionResult == nil {
+		return fmt.Errorf("no restriction result provided, but component %s is marked as restricted", component.Name)
+	}
+
+	var props []cdx.Property
+	for _, restriction := range *restrictionResult {
+		props = append(props, cdx.Property{
+			Name:  fmt.Sprintf("ibm:cryptography:restriction:rule"),
+			Value: fmt.Sprintf("%+v", restriction.restriction),
+		})
+		props = append(props, cdx.Property{
+			Name:  fmt.Sprintf("ibm:cryptography:restriction:reason"),
+			Value: fmt.Sprintf("%+v", restriction.reason),
+		})
+		props = append(props, cdx.Property{
+			Name:  fmt.Sprintf("ibm:cryptography:restriction:confidence"),
+			Value: fmt.Sprintf("%+v", restriction.confidence),
+		})
+	}
+
+	if component.Properties == nil {
+		component.Properties = &[]cdx.Property{}
+	}
+	*component.Properties = append(*component.Properties, props...)
 	return nil
 }
 
@@ -383,7 +405,7 @@ func (javaSecurity *JavaSecurity) extractTLSRules() ([]AlgorithmRestriction, err
 		}
 
 		algorithmRestriction = append(algorithmRestriction, AlgorithmRestriction{
-			name:            name,
+			algorithm:       name,
 			keySize:         keySize,
 			keySizeOperator: operator,
 		})

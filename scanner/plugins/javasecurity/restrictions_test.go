@@ -33,7 +33,7 @@ func TestEvaluation(t *testing.T) {
 			},
 		}
 		algorithmRestriction := AlgorithmRestriction{"RSA", keySizeOperatorGreater, 2048}
-		confidenceLevel, err := algorithmRestriction.allowed(component)
+		confidenceLevel, err := algorithmRestriction.allowed(&component)
 		if err != nil {
 			t.Fatal(err)
 		}

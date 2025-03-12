@@ -57,13 +57,6 @@ cbomkit-theia dir my/cool/directory
 			return
 		}
 
-		if err := container.Provide(func() string {
-			return bomSchemaPath
-		}, dig.Name("bomSchemaPath")); err != nil {
-			log.Error("Could not scan dir: ", err)
-			return
-		}
-
 		pluginConstructors, err := scanner.GetPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
 		if err != nil {
 			log.Error("Could not scan dir: ", err)
