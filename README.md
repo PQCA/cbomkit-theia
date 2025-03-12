@@ -60,6 +60,9 @@ Find Secrets & Keys
 > "keys": Private Keys Scanner
 Scans for private keys in the filesystem and adds them to the BOM
 
+> "vex": VEX Integration Plugin
+Adds VEX (Vulnerability Exploitability eXchange) statements to components in the CBOM
+
 Usage:
   cbomkit-theia [command]
 
@@ -73,7 +76,7 @@ Flags:
   -b, --bom string        BOM file to be verified and enriched
       --config string     config file (default is $HOME/.cbomkit-theia.yaml)
   -h, --help              help for cbomkit-theia
-  -p, --plugins strings   list of plugins to use (default [certificates,javasecurity,secrets,keys])
+  -p, --plugins strings   list of plugins to use (default [certificates,javasecurity,secrets,keys,vex])
       --schema string     BOM schema to validate the given BOM (default "provider/cyclonedx/bom-1.6.schema.json")
 
 Use "cbomkit-theia [command] --help" for more information about a command.
@@ -115,6 +118,7 @@ By default, all available plugins are enabled:
 - javasecurity
 - secrets
 - keys
+- vex
 
 **Important Note:** The application is configured to ensure all plugins are always available. If you manually edit the configuration file to exclude specific plugins, CBOMkit-theia will detect this and automatically restore all plugins to their default enabled state on the next run. If you need to disable specific plugins for a particular run, use the `-p` flag instead of modifying the config file:
 
@@ -140,6 +144,10 @@ By default, all available plugins are enabled:
   - Private Keys Scanner:
     - Scans for private keys in the filesystem
     - Adds the detected private keys to the CBOM
+  - VEX Integration Plugin:
+    - Adds VEX (Vulnerability Exploitability eXchange) statements to cryptographic components
+    - Uses CycloneDX's native VEX capabilities through the vulnerability section
+    - Marks cryptographic components with appropriate VEX statements (not_affected, protected_at_runtime)
 
 Additional plugins can be added by implementing the `Plugin` interface from [`ibm/cbomkit-theia/scanner/plugins`](./scanner/plugins/plugin.go#L41) and adding the plugins constructor to the `GetAllPluginConstructors` function in [`ibm/cbomkit-theia/scanner/scanner.go`](./scanner/scanner.go#L58): 
 

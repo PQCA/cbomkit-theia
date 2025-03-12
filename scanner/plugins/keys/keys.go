@@ -95,7 +95,7 @@ func (p *KeysPlugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 			log.WithError(err).Warnf("Failed to open file %s", filePath)
 			continue
 		}
-		
+
 		data, err := filesystem.ReadAllAndClose(reader)
 		if err != nil {
 			log.WithError(err).Warnf("Failed to read file %s", filePath)
@@ -156,8 +156,8 @@ func processPrivateKeyBlock(block *pem.Block, blockType pemlib.PEMBlockType, fil
 		if components[i].CryptoProperties != nil &&
 			components[i].CryptoProperties.RelatedCryptoMaterialProperties != nil &&
 			components[i].CryptoProperties.RelatedCryptoMaterialProperties.Type == cdx.RelatedCryptoMaterialTypePrivateKey {
-			
-			// Add file path as external reference
+
+			// Add a file path as external reference
 			if components[i].ExternalReferences == nil {
 				components[i].ExternalReferences = &[]cdx.ExternalReference{}
 			}
