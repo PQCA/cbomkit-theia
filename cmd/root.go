@@ -18,11 +18,9 @@ package cmd
 
 import (
 	"fmt"
-	"os"
-	"path/filepath"
-
-	"github.com/IBM/cbomkit-theia/cmd/image"
 	"github.com/IBM/cbomkit-theia/scanner"
+	log "github.com/sirupsen/logrus"
+	"os"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -30,7 +28,6 @@ import (
 
 var cfgFile string
 var bomFilePath string
-var bomSchemaPath string
 var activatedPlugins []string
 
 // rootCmd represents the base command when called without any subcommands
@@ -46,7 +43,7 @@ var rootCmd = &cobra.Command{
  ╚═════╝╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═╝ by IBM Research
 
 CBOMkit-theia analyzes cryptographic assets in a container image or directory.
-It is part of cbomkit (https://github.com/IBM/cbomkit) by IBM Research.
+It is part of CBOMkit (https://github.com/IBM/cbomkit) by IBM Research.
 
 --> Disclaimer: CBOMkit-theia does *not* perform source code scanning <--
 --> Use https://github.com/IBM/sonar-cryptography for source code scanning <--
@@ -55,7 +52,7 @@ Features
 - Find certificates in your image/directory
 - Find keys in your image/directory
 - Find secrets in your image/directory
-- Verify the executability of cryptographic assets in a CBOM (requires --bom to be set)
+- Verify the excitability of cryptographic assets in a CBOM (requires --bom to be set)
 - Output: Enriched CBOM to stdout/console
 
 Supported image/filesystem sources:
@@ -74,8 +71,8 @@ Supported BOM formats (input & output):
 
 Examples:
 cbomkit-theia dir my/cool/directory
-cbomkit-theia image get nginx
-cbomkit-theia image build my/Dockerfile` + "\n\n" + getPluginExplanations(),
+cbomkit-theia image nginx` +
+		"\n\n" + getPluginExplanations(),
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -88,62 +85,81 @@ func Execute() {
 }
 
 func init() {
-	rootCmd.AddCommand(image.ImageCmd)
+	// add image command
+	rootCmd.AddCommand(imageCommand)
+	rootCmd.AddCommand(dirCommand)
+	// read in config file and ENV variables if set
 	cobra.OnInitialize(initConfig)
+	// add config flag
+	rootCmd.
+		PersistentFlags().
+		StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cbomkit-theia.yaml)")
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.cbomkit-theia.yaml)")
-
-	rootCmd.PersistentFlags().StringVarP(&bomFilePath, "bom", "b", "", "BOM file to be verified and enriched")
-	viper.BindPFlag("bom", rootCmd.PersistentFlags().Lookup("bom"))
-	rootCmd.MarkPersistentFlagFilename("bom", ".json")
-
-	rootCmd.PersistentFlags().StringVar(&bomSchemaPath, "schema", filepath.Join("provider", "cyclonedx", "bom-1.6.schema.json"), "BOM schema to validate the given BOM")
-	viper.BindPFlag("schema", rootCmd.PersistentFlags().Lookup("schema"))
-	rootCmd.MarkPersistentFlagFilename("schema", ".json")
-
-	allPluginNames := make([]string, len(scanner.GetAllPluginConstructors()))
-
-	i := 0
-	for k := range scanner.GetAllPluginConstructors() {
-		allPluginNames[i] = k
-		i++
+	// add bom flag
+	rootCmd.
+		PersistentFlags().
+		StringVarP(&bomFilePath, "bom", "b", "", "BOM file to be verified and enriched")
+	err := rootCmd.MarkPersistentFlagFilename("bom", ".json")
+	if err != nil {
+		log.Error(err)
+		return
 	}
 
-	rootCmd.PersistentFlags().StringSliceVarP(&activatedPlugins, "plugins", "p", allPluginNames, "list of plugins to use")
-	viper.BindPFlag("plugins", rootCmd.PersistentFlags().Lookup("plugins"))
+	// add plugins
+	rootCmd.
+		PersistentFlags().
+		StringSliceVarP(&activatedPlugins, "plugins", "p", scanner.GetAllPluginNames(), "list of plugins to use")
+	err = viper.BindPFlag("plugins", rootCmd.PersistentFlags().Lookup("plugins"))
+	if err != nil {
+		log.Error(err)
+		return
+	}
 }
+
+const configName = "config"
+const configType = "yaml"
 
 // initConfig reads in config file and ENV variables if set.
 func initConfig() {
+	home, err := os.UserHomeDir()
+	configPath := home + "/.cbomkit-theia"
+
+	viper.SetConfigName(configName)
+	viper.SetConfigType(configType)
+	viper.AddConfigPath(configPath)
+
 	if cfgFile != "" {
-		// Use config file from the flag.
+		// Use a config file from the flag.
 		viper.SetConfigFile(cfgFile)
-	} else {
-		// Find home directory.
-		home, err := os.UserHomeDir()
-		cobra.CheckErr(err)
-
-		// Search config in home directory with name ".cbomkit-theia" (without extension).
-		viper.AddConfigPath(home)
-		viper.SetConfigType("yaml")
-		viper.SetConfigName(".cbomkit-theia")
 	}
 
-	viper.BindPFlag("docker_host", image.ImageCmd.PersistentFlags().Lookup("docker_host"))
-	viper.SetDefault("docker_host", "unix:///var/run/docker.sock")
+	// Find and read the config file
+	if err := viper.ReadInConfig(); err != nil { // Handle errors reading the config file
+		createConfFolder(configPath)
 
-	viper.AutomaticEnv() // read in environment variables that match
+		path := configPath + "/" + configName + "." + configType
+		if _, err := os.Create(path); err != nil { // perm 0666
+			log.WithField("path", path).WithError(err).Error("could not create config file")
+			return
+		}
 
-	err := viper.ReadInConfig()
-	if err == nil {
-		fmt.Fprintln(os.Stderr, "Using config file:", viper.ConfigFileUsed())
+		viper.SetDefault("docker_host", "unix:///var/run/docker.sock")
+		viper.SetDefault("plugins", scanner.GetAllPluginNames())
+
+		err = viper.WriteConfig()
+		if err != nil {
+			log.Error("Error in creating default configuration: ", err)
+			return
+		}
 	}
-
-	pluginConstructors, err := scanner.GetPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
+	// docker configuration
+	err = viper.BindPFlag("docker_host", imageCommand.PersistentFlags().Lookup("docker_host"))
 	if err != nil {
-		panic(err)
+		log.Error("Error in configuring cbomkit-theia: ", err)
+		return
 	}
-	viper.Set("pluginConstructors", pluginConstructors)
+	// read in environment variables that match
+	viper.AutomaticEnv()
 }
 
 func getPluginExplanations() string {
@@ -156,4 +172,15 @@ func getPluginExplanations() string {
 		out += fmt.Sprintf("> \"%v\": %v\n%v\n\n", name, p.GetName(), p.GetExplanation())
 	}
 	return out
+}
+
+func createConfFolder(location string) {
+	if _, err := os.Stat(location); os.IsNotExist(err) {
+		err := os.Mkdir(location, 0755)
+		if err != nil {
+			err = fmt.Errorf("could not create application folder '%s', %s", location, err)
+			fmt.Println(err)
+			return
+		}
+	}
 }

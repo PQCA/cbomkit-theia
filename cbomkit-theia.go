@@ -18,21 +18,12 @@ package main
 
 import (
 	"github.com/IBM/cbomkit-theia/cmd"
-	"log/slog"
-	"os"
+	log "github.com/sirupsen/logrus"
 )
 
 // Function used to set logging and start cobra
 func main() {
-	// Setup logging
-	logHandler := slog.NewJSONHandler(os.Stderr, &slog.HandlerOptions{
-		Level:     slog.LevelInfo,
-		AddSource: false,
-	})
-	logger := slog.New(logHandler)
-	logger.Handler().WithAttrs([]slog.Attr{})
-	slog.SetDefault(logger)
-
-	// Run
+	// Create a LevelVar and set it to DEBUG
+	log.SetLevel(log.InfoLevel)
 	cmd.Execute()
 }

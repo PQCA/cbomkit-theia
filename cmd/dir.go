@@ -17,19 +17,17 @@
 package cmd
 
 import (
+	log "github.com/sirupsen/logrus"
 	"io"
 	"os"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	"github.com/IBM/cbomkit-theia/scanner"
-	"github.com/IBM/cbomkit-theia/scanner/plugins"
-
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"go.uber.org/dig"
 )
 
-var dirCmd = &cobra.Command{
+var dirCommand = &cobra.Command{
 	Use:   "dir",
 	Short: "Analyze cryptographic assets in a directory",
 	Long: `Analyze cryptographic assets in a directory
@@ -47,45 +45,27 @@ cbomkit-theia dir my/cool/directory
 		if err := container.Provide(func() filesystem.Filesystem {
 			return filesystem.NewPlainFilesystem(args[0])
 		}); err != nil {
-			panic(err)
+			log.Error("Could not scan dir: ", err)
+			return
 		}
 
 		if err := container.Provide(func() string {
 			return bomFilePath
 		}, dig.Name("bomFilePath")); err != nil {
-			panic(err)
-		}
-
-		if err := container.Provide(func() string {
-			return bomSchemaPath
-		}, dig.Name("bomSchemaPath")); err != nil {
-			panic(err)
-		}
-
-		pluginConstructors, ok := viper.Get("pluginConstructors").([]plugins.PluginConstructor)
-
-		if !ok {
-			panic("Could not get pluginConstructors from Viper! This should not happen.")
-		}
-
-		for _, pluginConstructor := range pluginConstructors {
-			if err := container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
-				panic(err)
-			}
+			log.Error("Could not scan dir: ", err)
+			return
 		}
 
 		if err := container.Provide(func() io.Writer {
 			return os.Stdout
 		}); err != nil {
-			panic(err)
+			log.Error("Could not scan dir: ", err)
+			return
 		}
 
-		if err := container.Invoke(scanner.ReadFilesAndRunScan); err != nil {
-			panic(err)
+		if err := container.Invoke(scanner.RunScan); err != nil {
+			log.Error("Could not scan dir: ", err)
+			return
 		}
 	},
-}
-
-func init() {
-	rootCmd.AddCommand(dirCmd)
 }
