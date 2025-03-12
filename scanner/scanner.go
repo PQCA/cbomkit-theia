@@ -19,6 +19,7 @@ package scanner
 import (
 	"fmt"
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"io"
 	"os"
 	"slices"
@@ -60,7 +61,7 @@ func GetAllPluginConstructors() map[string]pluginpackage.PluginConstructor {
 	}
 }
 
-func GetPluginConstructorsFromNames(names []string) ([]pluginpackage.PluginConstructor, error) {
+func getPluginConstructorsFromNames(names []string) ([]pluginpackage.PluginConstructor, error) {
 	pluginConstructors := make([]pluginpackage.PluginConstructor, 0, len(names))
 	for _, name := range names {
 		constructor, ok := GetAllPluginConstructors()[name]
@@ -73,26 +74,12 @@ func GetPluginConstructorsFromNames(names []string) ([]pluginpackage.PluginConst
 	return pluginConstructors, nil
 }
 
-// ReadFilesAndRunScan High-level function to do most heavy lifting for scanning a filesystem with a BOM.
-func ReadFilesAndRunScan(params ParameterStruct) error {
-	var bom *cdx.BOM
-	if params.BomFilePath != "" {
-		log.WithField("path", params.BomFilePath).Debug("bom provided")
-		bomReader, err := os.Open(params.BomFilePath)
-		if err != nil {
-			return err
-		}
-		bom, err = cyclonedx.ParseBOM(bomReader)
-		if err != nil {
-			return err
-		}
-	} else {
-		bom = NewBOMWithMetadata()
-	}
-	return RunScan(bom, params.Plugins, params.Fs, params.Target)
+// RunScan High-level function to do most heavy lifting for scanning a filesystem with a BOM.
+func RunScan(params ParameterStruct) error {
+	return runScan(params.BomFilePath, params.Fs, params.Target)
 }
 
-func NewBOMWithMetadata() *cdx.BOM {
+func newBOMWithMetadata() *cdx.BOM {
 	bom := cdx.NewBOM()
 	bom.Metadata = &cdx.Metadata{
 		Timestamp: time.Now().Format(time.RFC3339),
@@ -101,8 +88,44 @@ func NewBOMWithMetadata() *cdx.BOM {
 	return bom
 }
 
-func RunScan(bom *cdx.BOM, plugins []pluginpackage.Plugin, fs filesystem.Filesystem, target io.Writer) error {
+func runScan(bomFilePath string, fs filesystem.Filesystem, target io.Writer) error {
+
+	var bom *cdx.BOM
+	if bomFilePath != "" {
+		log.WithField("path", bomFilePath).Debug("bom provided")
+		bomReader, err := os.Open(bomFilePath)
+		if err != nil {
+			return err
+		}
+		bom, err = cyclonedx.ParseBOM(bomReader)
+		if err != nil {
+			return err
+		}
+	} else {
+		bom = newBOMWithMetadata()
+	}
+
+	pluginConstructors, err := getPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
+	if err != nil {
+		return err
+	}
+
+	var plugins []pluginpackage.Plugin
+	for _, pluginConstructor := range pluginConstructors {
+		plugin, err := pluginConstructor()
+		if err != nil {
+			return err
+		}
+		// exclude java security plugin when no bom is provided
+		if bomFilePath == "" && plugin.GetName() == "java.security Plugin" {
+			log.Info("Since no BOM is provided as input the java security check is automatically disabled.")
+			continue
+		}
+		plugins = append(plugins, plugin)
+	}
+
 	scan := newScanner(plugins)
+
 	newBom, err := scan.scan(bom, fs)
 	if err != nil {
 		return err
@@ -133,7 +156,7 @@ func (scanner *scanner) scan(bom *cdx.BOM, fs filesystem.Filesystem) (*cdx.BOM, 
 		log.Info("=> Running ", plugin.GetName())
 		err = plugin.UpdateBOM(fs, bom)
 		if err != nil {
-			return bom, fmt.Errorf("scanner: plugin (%v) failed to updated components of bom; %w", plugin.GetName(), err)
+			return bom, fmt.Errorf("plugin (%v) failed to updated components of bom; %w", plugin.GetName(), err)
 		}
 	}
 	return bom, nil

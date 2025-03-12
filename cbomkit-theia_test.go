@@ -92,13 +92,13 @@ func TestScan(t *testing.T) {
 					return docker.GetSquashedFilesystem(image)
 				})
 				assert.NoError(t, err)
-				runErr = container.Invoke(scanner.ReadFilesAndRunScan)
+				runErr = container.Invoke(scanner.RunScan)
 			case testTypeDir:
 				err := container.Provide(func() filesystem.Filesystem {
 					return filesystem.NewPlainFilesystem(filepath.Join(testfileFolder, test.in, dirExtension))
 				})
 				assert.NoError(t, err)
-				runErr = container.Invoke(scanner.ReadFilesAndRunScan)
+				runErr = container.Invoke(scanner.RunScan)
 			}
 
 			if test.err {

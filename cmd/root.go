@@ -139,7 +139,7 @@ func initConfig() {
 
 		path := configPath + "/" + configName + "." + configType
 		if _, err := os.Create(path); err != nil { // perm 0666
-			log.Error("could not create config file '%s', %s", path, err)
+			log.WithField("path", path).WithError(err).Error("could not create config file")
 			return
 		}
 

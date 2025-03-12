@@ -92,17 +92,7 @@ func prepareImageAndRun(image docker.ActiveImage) error {
 		return err
 	}
 
-	pluginConstructors, err := scanner.GetPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
-	if err != nil {
-		return err
-	}
-	for _, pluginConstructor := range pluginConstructors {
-		if err := container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
-			return err
-		}
-	}
-
-	if err := container.Invoke(scanner.ReadFilesAndRunScan); err != nil {
+	if err := container.Invoke(scanner.RunScan); err != nil {
 		return err
 	}
 

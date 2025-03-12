@@ -24,7 +24,7 @@ import (
 // ErrInsufficientInformation Error
 // to represent cases in which a plugin had to interrupt its execution due to missing information
 // (e.g., in the BOM or in the filesystem)
-var ErrInsufficientInformation = errors.New("scanner: insufficient information to continue")
+var ErrInsufficientInformation = errors.New("insufficient information to continue")
 
 // GetInsufficientInformationError Error to represent cases in which a plugin had
 // to interrupt its execution due to missing information (e.g., in the BOM or in the filesystem)
@@ -35,7 +35,7 @@ func GetInsufficientInformationError(msg string, plugin string, affectedObjectTy
 // ErrParsingFailedAlthoughChecked Error
 // to represent cases in which parsing of a relevant file failed although the plugin verified the file beforehand;
 // this error might suggest a bug
-var ErrParsingFailedAlthoughChecked = errors.New("scanner: failed to parse file that was assumed to be a valid configuration")
+var ErrParsingFailedAlthoughChecked = errors.New("failed to parse file that was assumed to be a valid configuration")
 
 // GetParsingFailedAlthoughCheckedError Error to represent cases in which parsing of a relevant file failed
 // although the plugin verified the file beforehand;

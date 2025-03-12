@@ -19,9 +19,9 @@ package filesystem
 import (
 	goerrors "errors"
 	"fmt"
+	log "github.com/sirupsen/logrus"
 	"io"
 	"io/fs"
-	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -74,7 +74,7 @@ func (plainFilesystem PlainFilesystem) WalkDir(fn FilePathAnalysisFunc) error {
 		err = fn(relativePath)
 
 		if goerrors.Is(err, scannererrors.ErrParsingFailedAlthoughChecked) {
-			slog.Warn(err.Error())
+			log.Warn(err.Error())
 			return nil
 		} else {
 			return err

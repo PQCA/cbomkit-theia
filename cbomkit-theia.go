@@ -24,6 +24,6 @@ import (
 // Function used to set logging and start cobra
 func main() {
 	// Create a LevelVar and set it to DEBUG
-	log.SetLevel(log.DebugLevel)
+	log.SetLevel(log.InfoLevel)
 	cmd.Execute()
 }

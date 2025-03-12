@@ -24,7 +24,6 @@ import (
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	"github.com/IBM/cbomkit-theia/scanner"
 	"github.com/spf13/cobra"
-	"github.com/spf13/viper"
 	"go.uber.org/dig"
 )
 
@@ -57,19 +56,6 @@ cbomkit-theia dir my/cool/directory
 			return
 		}
 
-		pluginConstructors, err := scanner.GetPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
-		if err != nil {
-			log.Error("Could not scan dir: ", err)
-			return
-		}
-
-		for _, pluginConstructor := range pluginConstructors {
-			if err := container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
-				log.Error("Could not scan dir: ", err)
-				return
-			}
-		}
-
 		if err := container.Provide(func() io.Writer {
 			return os.Stdout
 		}); err != nil {
@@ -77,7 +63,7 @@ cbomkit-theia dir my/cool/directory
 			return
 		}
 
-		if err := container.Invoke(scanner.ReadFilesAndRunScan); err != nil {
+		if err := container.Invoke(scanner.RunScan); err != nil {
 			log.Error("Could not scan dir: ", err)
 			return
 		}
