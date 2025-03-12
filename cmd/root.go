@@ -133,6 +133,11 @@ func initConfig() {
 		viper.SetConfigFile(cfgFile)
 	}
 
+	// Always ensure all plugins are set as default values
+	allPlugins := scanner.GetAllPluginNames()
+	viper.SetDefault("docker_host", "unix:///var/run/docker.sock")
+	viper.SetDefault("plugins", allPlugins)
+
 	// Find and read the config file
 	if err := viper.ReadInConfig(); err != nil { // Handle errors reading the config file
 		createConfFolder(configPath)
@@ -143,13 +148,38 @@ func initConfig() {
 			return
 		}
 
-		viper.SetDefault("docker_host", "unix:///var/run/docker.sock")
-		viper.SetDefault("plugins", scanner.GetAllPluginNames())
-
 		err = viper.WriteConfig()
 		if err != nil {
 			log.Error("Error in creating default configuration: ", err)
 			return
+		}
+	} else {
+		// Config file exists - ensure all plugins are in the config
+		configPlugins := viper.GetStringSlice("plugins")
+		missingPlugins := false
+		
+		// Check if any plugin is missing
+		for _, plugin := range allPlugins {
+			found := false
+			for _, configPlugin := range configPlugins {
+				if configPlugin == plugin {
+					found = true
+					break
+				}
+			}
+			if !found {
+				missingPlugins = true
+				break
+			}
+		}
+		
+		// Update config if plugins are missing
+		if missingPlugins {
+			viper.Set("plugins", allPlugins)
+			err = viper.WriteConfig()
+			if err != nil {
+				log.Error("Error updating plugins in configuration: ", err)
+			}
 		}
 	}
 	// docker configuration
