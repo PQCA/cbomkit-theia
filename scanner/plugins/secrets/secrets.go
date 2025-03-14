@@ -17,7 +17,6 @@
 package secrets
 
 import (
-	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
 	log "github.com/sirupsen/logrus"
 	"strings"
 
@@ -121,28 +120,8 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		}
 		components = append(components, currentComponents...)
 	}
-
-	// Create DAG
-	bomDag := bomdag.NewBomDAG()
-	for _, comp := range components {
-		hash, err := bomDag.AddCDXComponent(comp)
-		if err != nil {
-			continue
-		}
-		err = bomDag.AddEdge(bomDag.Root, hash)
-		if err != nil {
-			continue
-		}
-	}
-
-	// DAG to components
-	secretComponents, _, err := bomDag.GetCDXComponents()
-	if err != nil {
-		return err
-	}
-
-	// Write to real bom
-	*bom.Components = append(*bom.Components, secretComponents...)
+	// Write  bom
+	*bom.Components = append(*bom.Components, components...)
 	return nil
 }
 

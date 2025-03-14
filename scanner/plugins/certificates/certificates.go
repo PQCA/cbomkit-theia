@@ -18,12 +18,10 @@ package certificates
 
 import (
 	"encoding/pem"
-	"errors"
-	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
+	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	log "github.com/sirupsen/logrus"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
@@ -88,7 +86,7 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 				if err != nil {
 					return err
 				}
-				certs, err := certificatesPlugin.parsex509CertFromPath(raw, path)
+				certs, err := parseX509CertFromPath(raw, path)
 				if err != nil {
 					return scannererrors.GetParsingFailedAlthoughCheckedError(err, certificatesPlugin.GetName())
 				}
@@ -110,7 +108,7 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 				if err != nil {
 					return err
 				}
-				certs, err := certificatesPlugin.parsePKCS7FromPath(raw, path)
+				certs, err := parsePKCS7FromPath(raw, path)
 				if err != nil {
 					return scannererrors.GetParsingFailedAlthoughCheckedError(err, certificatesPlugin.GetName())
 				}
@@ -118,7 +116,6 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 			default:
 				return nil
 			}
-
 			return nil
 		})
 
@@ -134,52 +131,20 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 
 	log.WithField("numberOfDetectedCertificates", len(certificates)).Info("Certificate searching done")
 
-	dag := bomdag.NewBomDAG()
-
 	for _, cert := range certificates {
-		certDAG, err := cert.generateDAG()
-
-		if errors.Is(err, errX509UnknownAlgorithm) {
-			log.WithError(err).Error(" X.509 certs contained unknown algorithms; continuing")
-		} else if err != nil {
-			return err
+		components, dependencyMap, err := cert.GetCDXComponents()
+		if err != nil {
+			log.WithError(err).Error("Error while adding certificate data to bom")
+			continue
 		}
-
-		if err := dag.Merge(certDAG); err != nil {
-			log.WithField("certificate path", cert.path).Error("Merging of DAGs failed")
-			return err
-		}
+		cyclonedx.AddComponents(bom, *components)
+		cyclonedx.AddDependencies(bom, *dependencyMap)
 	}
-
-	components, dependencyMap, err := dag.GetCDXComponents()
-
-	if err != nil {
-		return err
-	}
-
-	// Set the components
-	if len(components) > 0 {
-		if bom.Components == nil {
-			comps := make([]cdx.Component, 0, len(components))
-			bom.Components = &comps
-		}
-		*bom.Components = append(*bom.Components, components...)
-	}
-
-	// Set the dependency map
-	if len(dependencyMap) > 0 {
-		if bom.Dependencies == nil {
-			deps := make([]cdx.Dependency, 0, len(dependencyMap))
-			bom.Dependencies = &deps
-		}
-		*bom.Dependencies = MergeDependencyStructSlice(*bom.Dependencies, dependencyMapToStructSlice(dependencyMap))
-	}
-
 	return nil
 }
 
-// Parse a X.509 certificate from the given path (in base64 PEM or binary DER)
-func (certificatesPlugin *Plugin) parsex509CertFromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
+// Parse an X.509 certificate from the given path (in base64 PEM or binary DER)
+func parseX509CertFromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
 	blocks := pemutility.ParsePEMToBlocksWithTypeFilter(raw, pemutility.Filter{
 		FilterType: pemutility.PEMTypeFilterTypeAllowlist,
 		List:       []pemutility.PEMBlockType{pemutility.PEMBlockTypeCertificate},
@@ -203,7 +168,7 @@ func (certificatesPlugin *Plugin) parsex509CertFromPath(raw []byte, path string)
 }
 
 // Parse X.509 certificates from a PKCS7 file (base64 PEM format)
-func (certificatesPlugin *Plugin) parsePKCS7FromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
+func parsePKCS7FromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
 	block, _ := pem.Decode(raw)
 
 	pkcs7Object, err := pkcs7.Parse(block.Bytes)
@@ -222,47 +187,6 @@ func (certificatesPlugin *Plugin) parsePKCS7FromPath(raw []byte, path string) ([
 	}
 
 	return certsWithMetadata, nil
-}
-
-func dependencyMapToStructSlice(dependencyMap map[cdx.BOMReference][]string) []cdx.Dependency {
-	dependencies := make([]cdx.Dependency, 0)
-
-	for ref, dependsOn := range dependencyMap {
-		dependencies = append(dependencies, cdx.Dependency{
-			Ref:          string(ref),
-			Dependencies: &dependsOn,
-		})
-	}
-
-	return dependencies
-}
-
-func MergeDependencyStructSlice(a []cdx.Dependency, b []cdx.Dependency) []cdx.Dependency {
-	for _, bStruct := range b {
-		i := IndexBomRefInDependencySlice(a, cdx.BOMReference(bStruct.Ref))
-		if i != -1 {
-			// Merge
-			for _, s := range *bStruct.Dependencies {
-				if !slices.Contains(*a[i].Dependencies, s) {
-					*a[i].Dependencies = append(*a[i].Dependencies, s)
-				}
-			}
-		} else {
-			a = append(a, bStruct)
-		}
-	}
-	return a
-}
-
-// IndexBomRefInDependencySlice Return index in slice if bomRef is found in slice or -1 if not present
-func IndexBomRefInDependencySlice(slice []cdx.Dependency, bomRef cdx.BOMReference) int {
-	for i, dep := range slice {
-		if dep.Ref == string(bomRef) {
-			return i
-		}
-	}
-
-	return -1
 }
 
 // Set x509negativeserial=1 in the GODEBUG environment variable.

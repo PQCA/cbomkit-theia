@@ -51,7 +51,7 @@ cbomkit-theia image nginx`,
 		value := viper.GetString("docker_host")
 		err := os.Setenv("DOCKER_HOST", value)
 		if err != nil {
-			log.Error("Failed to set environment variable 'DOCKER_HOST'.")
+			log.Error("failed to set environment variable 'DOCKER_HOST'.")
 			return
 		}
 	},
@@ -59,11 +59,11 @@ cbomkit-theia image nginx`,
 	Run: func(cmd *cobra.Command, args []string) {
 		image, err := docker.GetImage(args[0])
 		if err != nil {
-			log.Error("Could not fetch image: ", err)
+			log.Error("could not fetch image: ", err)
 			return
 		}
 		if err := prepareImageAndRun(image); err != nil {
-			log.Error("Could not scan image: ", err)
+			log.Error("could not scan image: ", err)
 		}
 	},
 }
