@@ -20,7 +20,6 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-	"github.com/IBM/cbomkit-theia/provider/cyclonedx/bom-dag"
 	"path/filepath"
 	"time"
 
@@ -73,69 +72,48 @@ func parseCertificatesToX509CertificateWithMetadata(der []byte, path string) ([]
 	return certsWithMetadata, err
 }
 
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) generateDAG() (bomdag.BomDAG, error) {
-	dag := bomdag.NewBomDAG()
-
+func (x509CertificateWithMetadata *x509CertificateWithMetadata) GetCDXComponents() (*[]cdx.Component, *map[cdx.BOMReference][]string, error) {
 	// Creating BOM Components
+	components := make([]cdx.Component, 0)
+	dependencyMap := make(map[cdx.BOMReference][]string)
+	// get certificate algorithm as cdx component
 	certificate := x509CertificateWithMetadata.getCertificateComponent()
-	signatureAlgorithm, err1 := x509CertificateWithMetadata.getSignatureAlgorithmComponent()
-	publicKeyAlgorithm, err2 := x509CertificateWithMetadata.getPublicKeyAlgorithmComponent()
-	publicKey, err3 := x509CertificateWithMetadata.getPublicKeyComponent()
-
-	err := errors.Join(err1, err2, err3)
+	// get signature algorithm as cdx component
+	signatureAlgorithm, err := x509CertificateWithMetadata.getSignatureAlgorithmComponent()
 	if err != nil {
-		return dag, err
+		return nil, nil, err
 	}
-
-	// Adding BOM Components to DAG
-	certificateHash, err1 := dag.AddCDXComponent(certificate)
-	publicKeyAlgorithmHash, err2 := dag.AddCDXComponent(publicKeyAlgorithm)
-	publicKeyHash, err3 := dag.AddCDXComponent(publicKey)
-
-	var signatureAlgorithmHash, signatureAlgorithmPKEHash, signatureAlgorithmHashHash bomdag.VertexHash
-	var err4, err5, err6 error
 	if signatureAlgorithm.signature != nil {
-		signatureAlgorithmHash, err4 = dag.AddCDXComponent(*signatureAlgorithm.signature)
+		if signatureAlgorithm.pke != nil {
+			dependencyMap[cdx.BOMReference(signatureAlgorithm.signature.BOMRef)] = append(dependencyMap[cdx.BOMReference(signatureAlgorithm.signature.BOMRef)], signatureAlgorithm.pke.BOMRef)
+			components = append(components, *signatureAlgorithm.pke)
+		}
+		if signatureAlgorithm.hash != nil {
+			dependencyMap[cdx.BOMReference(signatureAlgorithm.signature.BOMRef)] = append(dependencyMap[cdx.BOMReference(signatureAlgorithm.signature.BOMRef)], signatureAlgorithm.hash.BOMRef)
+			components = append(components, *signatureAlgorithm.hash)
+		}
+		certificate.CryptoProperties.CertificateProperties.SignatureAlgorithmRef = cdx.BOMReference(signatureAlgorithm.signature.BOMRef)
+		components = append(components, *signatureAlgorithm.signature)
 	}
-	if signatureAlgorithm.pke != nil {
-		signatureAlgorithmPKEHash, err5 = dag.AddCDXComponent(*signatureAlgorithm.pke)
-	}
-	if signatureAlgorithm.hash != nil {
-		signatureAlgorithmHashHash, err6 = dag.AddCDXComponent(*signatureAlgorithm.hash)
-	}
-
-	err = errors.Join(err1, err2, err3, err4, err5, err6)
+	// add public key algorithm
+	publicKeyAlgorithm, err := x509CertificateWithMetadata.getPublicKeyAlgorithmComponent()
 	if err != nil {
-		return dag, err
+		return nil, nil, err
 	}
-
-	// Creating Edges in DAG
-	err6 = dag.AddEdge(dag.Root, certificateHash)
-	err1 = dag.AddEdge(certificateHash, publicKeyHash,
-		bomdag.EdgeDependencyType(bomdag.DependencyTypeCertificatePropertiesSubjectPublicKeyRef))
-	err2 = dag.AddEdge(publicKeyHash, publicKeyAlgorithmHash,
-		bomdag.EdgeDependencyType(bomdag.DependencyTypeRelatedCryptoMaterialPropertiesAlgorithmRef))
-	err3 = dag.AddEdge(certificateHash, signatureAlgorithmHash,
-		bomdag.EdgeDependencyType(bomdag.DependencyTypeCertificatePropertiesSignatureAlgorithmRef))
-	err4 = dag.AddEdge(signatureAlgorithmHash, signatureAlgorithmPKEHash,
-		bomdag.EdgeDependencyType(bomdag.DependencyTypeDependsOn))
-	err5 = dag.AddEdge(signatureAlgorithmHash, signatureAlgorithmHashHash,
-		bomdag.EdgeDependencyType(bomdag.DependencyTypeDependsOn))
-
-	return dag, errors.Join(err1, err2, err3, err4, err5, err6)
-}
-
-// Generate CycloneDX components from the x509CertificateWithMetadata (e.g. certificate, signature algorithm, public key and public key algorithm)
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) generateCDXComponents() ([]cdx.Component, []cdx.Dependency, error) {
-	dag, err := x509CertificateWithMetadata.generateDAG()
-
+	components = append(components, publicKeyAlgorithm)
+	// add public key
+	publicKey, err := x509CertificateWithMetadata.getPublicKeyComponent()
 	if err != nil {
-		return []cdx.Component{}, []cdx.Dependency{}, err
+		return nil, nil, err
 	}
+	// add dependency to public key algorithm
+	publicKey.CryptoProperties.RelatedCryptoMaterialProperties.AlgorithmRef = cdx.BOMReference(publicKeyAlgorithm.BOMRef)
+	// add certificate dependency to public key
+	certificate.CryptoProperties.CertificateProperties.SubjectPublicKeyRef = cdx.BOMReference(publicKey.BOMRef)
+	components = append(components, publicKey)
+	components = append(components, certificate)
 
-	components, dependencyMap, err := dag.GetCDXComponents()
-
-	return components, dependencyMapToStructSlice(dependencyMap), err
+	return &components, &dependencyMap, nil
 }
 
 // Generate the CycloneDX component for the certificate
@@ -388,7 +366,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hash.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier = "256"
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
-		pke.Name = "RSAPSS"
+		pke.Name = "RSA-PSS"
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -405,7 +383,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hash.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier = "384"
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
-		pke.Name = "RSAPSS"
+		pke.Name = "RSA-PSS"
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -422,7 +400,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hash.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier = "512"
 
 		pke := getGenericPKEAlgorithmComponent(x509CertificateWithMetadata.path)
-		pke.Name = "RSAPSS"
+		pke.Name = "RSA-PSS"
 		return signatureAlgorithmResult{
 			signature: &comp,
 			hash:      &hash,
@@ -455,11 +433,8 @@ func getGenericSignatureAlgorithmComponent(algo x509.SignatureAlgorithm, path st
 		CryptoProperties: &cdx.CryptoProperties{
 			AssetType: cdx.CryptoAssetTypeAlgorithm,
 			AlgorithmProperties: &cdx.CryptoAlgorithmProperties{
-				Primitive:              cdx.CryptoPrimitiveSignature,
-				ExecutionEnvironment:   cdx.CryptoExecutionEnvironmentUnknown,
-				ImplementationPlatform: cdx.ImplementationPlatformUnknown,
-				CertificationLevel:     &[]cdx.CryptoCertificationLevel{cdx.CryptoCertificationLevelUnknown},
-				CryptoFunctions:        &[]cdx.CryptoFunction{cdx.CryptoFunctionSign},
+				Primitive:       cdx.CryptoPrimitiveSignature,
+				CryptoFunctions: &[]cdx.CryptoFunction{cdx.CryptoFunctionSign},
 			},
 		},
 		Evidence: &cdx.Evidence{
@@ -479,11 +454,8 @@ func getGenericHashAlgorithmComponent(path string) cdx.Component {
 		CryptoProperties: &cdx.CryptoProperties{
 			AssetType: cdx.CryptoAssetTypeAlgorithm,
 			AlgorithmProperties: &cdx.CryptoAlgorithmProperties{
-				Primitive:              cdx.CryptoPrimitiveHash,
-				ExecutionEnvironment:   cdx.CryptoExecutionEnvironmentUnknown,
-				ImplementationPlatform: cdx.ImplementationPlatformUnknown,
-				CertificationLevel:     &[]cdx.CryptoCertificationLevel{cdx.CryptoCertificationLevelUnknown},
-				CryptoFunctions:        &[]cdx.CryptoFunction{cdx.CryptoFunctionDigest},
+				Primitive:       cdx.CryptoPrimitiveHash,
+				CryptoFunctions: &[]cdx.CryptoFunction{cdx.CryptoFunctionDigest},
 			},
 		},
 		Evidence: &cdx.Evidence{
@@ -503,11 +475,8 @@ func getGenericPKEAlgorithmComponent(path string) cdx.Component {
 		CryptoProperties: &cdx.CryptoProperties{
 			AssetType: cdx.CryptoAssetTypeAlgorithm,
 			AlgorithmProperties: &cdx.CryptoAlgorithmProperties{
-				Primitive:              cdx.CryptoPrimitivePKE,
-				ExecutionEnvironment:   cdx.CryptoExecutionEnvironmentUnknown,
-				ImplementationPlatform: cdx.ImplementationPlatformUnknown,
-				CertificationLevel:     &[]cdx.CryptoCertificationLevel{cdx.CryptoCertificationLevelUnknown},
-				CryptoFunctions:        &[]cdx.CryptoFunction{cdx.CryptoFunctionSign},
+				Primitive:       cdx.CryptoPrimitivePKE,
+				CryptoFunctions: &[]cdx.CryptoFunction{cdx.CryptoFunctionSign},
 			},
 		},
 		Evidence: &cdx.Evidence{

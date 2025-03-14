@@ -18,22 +18,19 @@ package scanner
 
 import (
 	"fmt"
-	log "github.com/sirupsen/logrus"
-	"github.com/spf13/viper"
-	"io"
-	"os"
-	"slices"
-	"time"
-
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	pluginpackage "github.com/IBM/cbomkit-theia/scanner/plugins"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/certificates"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/javasecurity"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/secrets"
+	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
+	"io"
+	"os"
+	"slices"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
-	"github.com/google/uuid"
 	"go.uber.org/dig"
 )
 
@@ -79,20 +76,11 @@ func RunScan(params ParameterStruct) error {
 	return runScan(params.BomFilePath, params.Fs, params.Target)
 }
 
-func newBOMWithMetadata() *cdx.BOM {
-	bom := cdx.NewBOM()
-	bom.Metadata = &cdx.Metadata{
-		Timestamp: time.Now().Format(time.RFC3339),
-	}
-	bom.SerialNumber = "urn:uuid:" + uuid.New().String()
-	return bom
-}
-
 func runScan(bomFilePath string, fs filesystem.Filesystem, target io.Writer) error {
-
 	var bom *cdx.BOM
 	if bomFilePath != "" {
 		log.WithField("path", bomFilePath).Debug("bom provided")
+
 		bomReader, err := os.Open(bomFilePath)
 		if err != nil {
 			return err
@@ -102,7 +90,7 @@ func runScan(bomFilePath string, fs filesystem.Filesystem, target io.Writer) err
 			return err
 		}
 	} else {
-		bom = newBOMWithMetadata()
+		bom = cyclonedx.NewBOMWithMetadata()
 	}
 
 	pluginConstructors, err := getPluginConstructorsFromNames(viper.GetStringSlice("plugins"))
@@ -164,7 +152,7 @@ func (scanner *scanner) scan(bom *cdx.BOM, fs filesystem.Filesystem) (*cdx.BOM, 
 
 // Create a new scanner object for the specific filesystem
 func newScanner(plugins []pluginpackage.Plugin) scanner {
-	log.WithField("plugins", pluginpackage.PluginSliceToString(plugins)).Debug("Initializing a new scanner")
+	log.WithField("plugins", pluginpackage.PluginSliceToString(plugins)).Debug("initializing a new scanner")
 	return scanner{
 		configPlugins: plugins,
 	}

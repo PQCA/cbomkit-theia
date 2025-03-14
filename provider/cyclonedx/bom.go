@@ -18,11 +18,22 @@ package cyclonedx
 
 import (
 	"bytes"
+	cdx "github.com/CycloneDX/cyclonedx-go"
+	"github.com/google/uuid"
 	"io"
 	"log/slog"
-
-	cdx "github.com/CycloneDX/cyclonedx-go"
+	"slices"
+	"time"
 )
+
+func NewBOMWithMetadata() *cdx.BOM {
+	bom := cdx.NewBOM()
+	bom.Metadata = &cdx.Metadata{
+		Timestamp: time.Now().Format(time.RFC3339),
+	}
+	bom.SerialNumber = "urn:uuid:" + uuid.New().String()
+	return bom
+}
 
 // WriteBOM Write bom to the file
 func WriteBOM(bom *cdx.BOM, writer io.Writer) error {
@@ -34,6 +45,28 @@ func WriteBOM(bom *cdx.BOM, writer io.Writer) error {
 		return err
 	}
 	return nil
+}
+
+// AddComponents Add components to the given bom
+func AddComponents(bom *cdx.BOM, components []cdx.Component) {
+	if len(components) > 0 {
+		if bom.Components == nil {
+			comps := make([]cdx.Component, 0, len(components))
+			bom.Components = &comps
+		}
+		*bom.Components = append(*bom.Components, components...)
+	}
+}
+
+// AddDependencies Add dependencies to the given bom
+func AddDependencies(bom *cdx.BOM, dependencyMap map[cdx.BOMReference][]string) {
+	if len(dependencyMap) > 0 {
+		if bom.Dependencies == nil {
+			deps := make([]cdx.Dependency, 0, len(dependencyMap))
+			bom.Dependencies = &deps
+		}
+		*bom.Dependencies = mergeDependencyStructSlice(*bom.Dependencies, dependencyMapToStructSlice(dependencyMap))
+	}
 }
 
 // ParseBOM Parse a CycloneDX BOM from a path using the schema under schemaPath
@@ -51,4 +84,42 @@ func ParseBOM(bomReader io.Reader) (*cdx.BOM, error) {
 		return new(cdx.BOM), err
 	}
 	return bom, nil
+}
+
+func dependencyMapToStructSlice(dependencyMap map[cdx.BOMReference][]string) []cdx.Dependency {
+	dependencies := make([]cdx.Dependency, 0)
+	for ref, dependsOn := range dependencyMap {
+		dependencies = append(dependencies, cdx.Dependency{
+			Ref:          string(ref),
+			Dependencies: &dependsOn,
+		})
+	}
+	return dependencies
+}
+
+func mergeDependencyStructSlice(a []cdx.Dependency, b []cdx.Dependency) []cdx.Dependency {
+	for _, bStruct := range b {
+		i := indexBomRefInDependencySlice(a, cdx.BOMReference(bStruct.Ref))
+		if i != -1 {
+			// Merge
+			for _, s := range *bStruct.Dependencies {
+				if !slices.Contains(*a[i].Dependencies, s) {
+					*a[i].Dependencies = append(*a[i].Dependencies, s)
+				}
+			}
+		} else {
+			a = append(a, bStruct)
+		}
+	}
+	return a
+}
+
+// Return index in slice if bomRef is found in slice or -1 if not present
+func indexBomRefInDependencySlice(slice []cdx.Dependency, bomRef cdx.BOMReference) int {
+	for i, dep := range slice {
+		if dep.Ref == string(bomRef) {
+			return i
+		}
+	}
+	return -1
 }
