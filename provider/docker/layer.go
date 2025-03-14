@@ -22,6 +22,7 @@ import (
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 	"io"
+	"strings"
 
 	"github.com/anchore/stereoscope/pkg/file"
 	"github.com/anchore/stereoscope/pkg/filetree/filenode"
@@ -61,6 +62,18 @@ func (layer Layer) Open(path string) (io.ReadCloser, error) {
 		return nil, err
 	}
 	return readCloser, err
+}
+
+// Exists Check if a file at path exists in this layer
+func (layer Layer) Exists(path string) (bool, error) {
+	_, err := layer.OpenPathFromSquash(file.Path(path))
+	if err != nil {
+		if strings.HasPrefix(err.Error(), "could not find file path in Tree") {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
 }
 
 // GetConfig Get the image config

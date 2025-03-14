@@ -38,6 +38,7 @@ type FilePathAnalysisFunc func(path string) error
 type Filesystem interface {
 	WalkDir(fn FilePathAnalysisFunc) (err error)            // Walk the full filesystem using the FilePathAnalysisFunc fn
 	Open(path string) (readCloser io.ReadCloser, err error) // Read a specific file with a path from the root of the filesystem
+	Exists(path string) (exists bool, err error)            // Check if a specific file exists with a path from the root of the filesystem
 	GetConfig() (config v1.Config, ok bool)                 // Get a config of this filesystem in container image format (if it exists)
 	GetIdentifier() string                                  // Identifier for this specific filesystem; can be used for logging
 }
@@ -85,6 +86,17 @@ func (plainFilesystem PlainFilesystem) WalkDir(fn FilePathAnalysisFunc) error {
 // Open Read a file from this filesystem; a path should be relative to PlainFilesystem.rootPath
 func (plainFilesystem PlainFilesystem) Open(path string) (io.ReadCloser, error) {
 	return os.Open(filepath.Join(plainFilesystem.rootPath, path))
+}
+
+// Exists Check if a file at path exists in the filesystem; a path should be relative to PlainFilesystem.rootPath
+func (plainFilesystem PlainFilesystem) Exists(path string) (bool, error) {
+	_, err := os.Lstat(filepath.Join(plainFilesystem.rootPath, path))
+	if os.IsNotExist(err) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 // GetConfig A plain directory does not have a filesystem, so we return an empty object and false

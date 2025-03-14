@@ -70,12 +70,12 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 		func(path string) (err error) {
 			switch filepath.Ext(path) {
 			case ".pem", ".cer", ".cert", ".der", ".ca-bundle", ".crt":
-				_, err = os.Lstat(path)
-				if os.IsNotExist(err) {
-					log.WithError(err).Error("cert does not exist at path; continuing")
-					return nil
-				} else if err != nil {
+				exists, err := fs.Exists(path)
+				if err != nil {
 					return err
+				} else if !exists {
+					log.WithField("path", path).Warning("Certificate does not exist")
+					return nil
 				}
 
 				readCloser, err := fs.Open(path)
@@ -92,12 +92,12 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 				}
 				certificates = append(certificates, certs...)
 			case ".p7a", ".p7b", ".p7c", ".p7r", ".p7s", ".spc":
-				_, err = os.Lstat(path)
-				if os.IsNotExist(err) {
-					log.WithError(err).Error("cert does not exist at path; continuing")
-					return nil
-				} else if err != nil {
+				exists, err := fs.Exists(path)
+				if err != nil {
 					return err
+				} else if !exists {
+					log.WithField("path", path).Warning("Certificate does not exist")
+					return nil
 				}
 
 				readCloser, err := fs.Open(path)
