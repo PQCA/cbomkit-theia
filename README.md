@@ -55,13 +55,7 @@ Verify the executability of cryptographic assets from Java code
 Adds a confidence level (0-100) to the CBOM components to show how likely it is that this component is actually executable
 
 > "secrets": Secret Detection Plugin
-Find Secrets & Keys
-
-> "keys": Private Keys Scanner
-Scans for private keys in the filesystem and adds them to the BOM
-
-> "vex": VEX Integration Plugin
-Adds VEX (Vulnerability Exploitability eXchange) statements to components in the CBOM
+Find Secrets & Keys (private, public and secret keys)
 
 Usage:
   cbomkit-theia [command]
@@ -85,7 +79,7 @@ Use "cbomkit-theia [command] --help" for more information about a command.
 ## Prerequisites
 
 - Go 
-  - Version: `1.23` or up
+  - Version: `1.24` or up
 - Docker (or similar container runtimes)
   - Recommended: Set the `DOCKER_HOST` environment variable (default: `unix:///var/run/docker.sock`)
 
