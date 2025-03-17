@@ -52,10 +52,10 @@ Find x.509 certificates
 
 > "javasecurity": java.security Plugin
 Verify the executability of cryptographic assets from Java code
-Adds a confidence level (0-100) to the CBOM components to show how likely it is that this component is actually executable
+Adds a confidence level (0-1) to the CBOM components to show how likely it is that this component is actually executable
 
 > "secrets": Secret Detection Plugin
-Find Secrets & Keys (private, public and secret keys)
+Find secrets & keys (private, public and secret keys)
 
 Usage:
   cbomkit-theia [command]
@@ -134,14 +134,7 @@ By default, all available plugins are enabled:
     - Add the certificates to the CBOM, as well as signature algorithms, public keys and public key algorithms
   - Secret Plugin:
     - Leverages [gitleaks](https://github.com/gitleaks/gitleaks) to find secrets and keys in the data source
-    - Adds the secrets and keys to the CBOM
-  - Private Keys Scanner:
-    - Scans for private keys in the filesystem
-    - Adds the detected private keys to the CBOM
-  - VEX Integration Plugin:
-    - Adds VEX (Vulnerability Exploitability eXchange) statements to cryptographic components
-    - Uses CycloneDX's native VEX capabilities through the vulnerability section
-    - Marks cryptographic components with appropriate VEX statements (not_affected, protected_at_runtime)
+    - Add the secrets and keys (private, public and secret keys) to the CBOM
 
 Additional plugins can be added by implementing the `Plugin` interface from [`ibm/cbomkit-theia/scanner/plugins`](./scanner/plugins/plugin.go#L41) and adding the plugins constructor to the `GetAllPluginConstructors` function in [`ibm/cbomkit-theia/scanner/scanner.go`](./scanner/scanner.go#L58): 
 
