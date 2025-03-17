@@ -110,9 +110,7 @@ CBOMkit-theia reads its configuration from `$HOME/.cbomkit-theia/config.yaml`. T
 By default, all available plugins are enabled:
 - certificates
 - javasecurity
-- secrets
-- keys
-- vex
+- secrets (private, public and secret keys)
 
 **Important Note:** The application is configured to ensure all plugins are always available. If you manually edit the configuration file to exclude specific plugins, CBOMkit-theia will detect this and automatically restore all plugins to their default enabled state on the next run. If you need to disable specific plugins for a particular run, use the `-p` flag instead of modifying the config file:
 
