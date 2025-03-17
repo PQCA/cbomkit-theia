@@ -23,9 +23,7 @@ import (
 	pluginpackage "github.com/IBM/cbomkit-theia/scanner/plugins"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/certificates"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/javasecurity"
-	"github.com/IBM/cbomkit-theia/scanner/plugins/keys"
 	"github.com/IBM/cbomkit-theia/scanner/plugins/secrets"
-	"github.com/IBM/cbomkit-theia/scanner/plugins/vex"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
 	"io"
@@ -57,8 +55,6 @@ func GetAllPluginConstructors() map[string]pluginpackage.PluginConstructor {
 		"certificates": certificates.NewCertificatePlugin,
 		"javasecurity": javasecurity.NewJavaSecurityPlugin,
 		"secrets":      secrets.NewSecretsPlugin,
-		"keys":         keys.NewKeysPlugin,
-		"vex":          vex.NewVEXPlugin,
 	}
 }
 
