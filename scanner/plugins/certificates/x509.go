@@ -96,7 +96,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) GetCDXComponents
 			components = append(components, *signatureAlgorithm.hash)
 		}
 		certificate.CryptoProperties.CertificateProperties.SignatureAlgorithmRef = cdx.BOMReference(signatureAlgorithm.hashAndSignature.BOMRef)
-		components = append(components, *signatureAlgorithm.signature)
+		components = append(components, *signatureAlgorithm.hashAndSignature)
 	}
 	// model the algorithm corresponding to the public key on the certificate
 	publicKeyAlgorithm, err := x509CertificateWithMetadata.getPublicKeyAlgorithmComponent()
@@ -466,10 +466,8 @@ func getGenericPublicKeyAlgorithmComponent(path string) cdx.Component {
 		Type:   cdx.ComponentTypeCryptographicAsset,
 		BOMRef: uuid.New().String(),
 		CryptoProperties: &cdx.CryptoProperties{
-			AssetType: cdx.CryptoAssetTypeAlgorithm,
-			AlgorithmProperties: &cdx.CryptoAlgorithmProperties{
-				CertificationLevel: &[]cdx.CryptoCertificationLevel{cdx.CryptoCertificationLevelUnknown},
-			},
+			AssetType:           cdx.CryptoAssetTypeAlgorithm,
+			AlgorithmProperties: &cdx.CryptoAlgorithmProperties{},
 		},
 		Evidence: &cdx.Evidence{
 			Occurrences: &[]cdx.EvidenceOccurrence{
