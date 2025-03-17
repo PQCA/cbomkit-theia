@@ -494,9 +494,8 @@ func getGenericHashAlgorithmComponent(path string) cdx.Component {
 		CryptoProperties: &cdx.CryptoProperties{
 			AssetType: cdx.CryptoAssetTypeAlgorithm,
 			AlgorithmProperties: &cdx.CryptoAlgorithmProperties{
-				Primitive:          cdx.CryptoPrimitiveHash,
-				CertificationLevel: &[]cdx.CryptoCertificationLevel{cdx.CryptoCertificationLevelUnknown},
-				CryptoFunctions:    &[]cdx.CryptoFunction{cdx.CryptoFunctionDigest},
+				Primitive:       cdx.CryptoPrimitiveHash,
+				CryptoFunctions: &[]cdx.CryptoFunction{cdx.CryptoFunctionDigest},
 			},
 		},
 		Evidence: &cdx.Evidence{
