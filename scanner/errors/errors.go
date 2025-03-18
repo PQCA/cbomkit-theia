@@ -43,3 +43,9 @@ var ErrParsingFailedAlthoughChecked = errors.New("failed to parse file that was 
 func GetParsingFailedAlthoughCheckedError(parsingError error, plugin string) error {
 	return fmt.Errorf("%w: (%v) %w", ErrParsingFailedAlthoughChecked, plugin, parsingError)
 }
+
+// ErrUnknownKeyAlgorithm Error
+var ErrUnknownKeyAlgorithm = errors.New("key block uses unknown algorithm")
+
+// ErrX509UnknownAlgorithm During parsing of the x509.Certificate an unknown algorithm was found
+var ErrX509UnknownAlgorithm = errors.New("x.509 certificate has unknown algorithm")

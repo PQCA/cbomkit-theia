@@ -1,6 +1,7 @@
 module github.com/IBM/cbomkit-theia
 
-go 1.23.0
+go 1.24.1
+
 require (
 	github.com/CycloneDX/cyclonedx-go v0.9.2
 	github.com/anchore/stereoscope v0.1.0

@@ -22,7 +22,7 @@ import (
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	pemlib "github.com/IBM/cbomkit-theia/scanner/pem"
+	"github.com/IBM/cbomkit-theia/scanner/pem"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -141,19 +141,19 @@ func (finding findingWithMetadata) getComponents() ([]cdx.Component, error) {
 
 func (finding findingWithMetadata) getPrivateKeyComponent() ([]cdx.Component, error) {
 	// Filter for private keys only
-	privateKeyFilter := pemlib.Filter{
-		FilterType: pemlib.PEMTypeFilterTypeAllowlist,
-		List: []pemlib.PEMBlockType{
-			pemlib.PEMBlockTypePrivateKey,
-			pemlib.PEMBlockTypeEncryptedPrivateKey,
-			pemlib.PEMBlockTypeRSAPrivateKey,
-			pemlib.PEMBlockTypeECPrivateKey,
-			pemlib.PEMBlockTypeOPENSSHPrivateKey,
+	privateKeyFilter := pem.Filter{
+		FilterType: pem.TypeAllowlist,
+		List: []pem.BlockType{
+			pem.BlockTypePrivateKey,
+			pem.BlockTypeEncryptedPrivateKey,
+			pem.BlockTypeRSAPrivateKey,
+			pem.BlockTypeECPrivateKey,
+			pem.BlockTypeOPENSSHPrivateKey,
 		},
 	}
 
 	// Parse PEM blocks
-	blocks := pemlib.ParsePEMToBlocksWithTypeFilter(finding.raw, privateKeyFilter)
+	blocks := pem.ParsePEMToBlocksWithTypeFilter(finding.raw, privateKeyFilter)
 	if len(blocks) == 0 {
 		return []cdx.Component{finding.getGenericSecretComponent()}, nil
 	}
@@ -162,7 +162,7 @@ func (finding findingWithMetadata) getPrivateKeyComponent() ([]cdx.Component, er
 
 	components := make([]cdx.Component, 0)
 	for block := range blocks {
-		currentComponents, err := pemlib.GenerateComponentsFromPEMKeyBlock(block)
+		currentComponents, err := pem.GenerateCdxComponents(block)
 		if err != nil {
 			continue
 		}
