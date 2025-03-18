@@ -18,10 +18,11 @@ package secrets
 
 import (
 	log "github.com/sirupsen/logrus"
+	"github.com/spf13/viper"
 	"strings"
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
+	pemlib "github.com/IBM/cbomkit-theia/scanner/pem"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -59,10 +60,15 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	if err != nil {
 		return err
 	}
-
 	// Detect findings
 	findings := make([]findingWithMetadata, 0)
-	if err = fs.WalkDir(func(path string) error {
+	if err := fs.WalkDir(func(path string) error {
+		// Skip large files
+		maxFileSize := viper.GetInt64("keys.max_file_size")
+		if maxFileSize <= 0 {
+			maxFileSize = 1024 * 1024 // Default to 1MB
+		}
+
 		readCloser, err := fs.Open(path)
 		if err != nil {
 			return nil // skip and continue
@@ -72,7 +78,6 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		if err != nil {
 			return nil // skip and continue
 		}
-
 		if !(strings.HasPrefix(mime.String(), "text") || mime.Parent() != nil && strings.HasPrefix(mime.Parent().String(), "text")) {
 			return nil // skip and continue
 		}
@@ -83,11 +88,13 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 			return nil
 		}
 
-		fragment := detect.Fragment{
-			Raw:      string(content),
-			FilePath: path,
+		// Skip large files
+		if int64(len(content)) > maxFileSize {
+			log.Warnf("Skipping large file: %s (size: %d bytes)", path, len(content))
+			return nil
 		}
 
+		fragment := detect.Fragment{Raw: string(content), FilePath: path}
 		for _, finding := range detector.Detect(fragment) {
 			findings = append(findings, findingWithMetadata{
 				Finding: finding,
@@ -95,8 +102,7 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 				raw:     content,
 			})
 			log.WithFields(log.Fields{
-				"type": finding.RuleID,
-				"file": finding.File,
+				"type": finding.RuleID, "file": finding.File,
 			}).Info("Secret detected")
 		}
 		return nil
@@ -128,42 +134,58 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 func (finding findingWithMetadata) getComponents() ([]cdx.Component, error) {
 	switch finding.RuleID {
 	case "private-key":
-		blocks := pemutility.ParsePEMToBlocksWithTypeFilter(finding.raw, pemutility.Filter{
-			FilterType: pemutility.PEMTypeFilterTypeAllowlist,
-			List:       []pemutility.PEMBlockType{pemutility.PEMBlockTypePrivateKey, pemutility.PEMBlockTypeECPrivateKey, pemutility.PEMBlockTypeRSAPrivateKey, pemutility.PEMBlockTypeOPENSSHPrivateKey},
-		})
+		return finding.getPrivateKeyComponent()
+	}
+	return []cdx.Component{finding.getGenericSecretComponent()}, nil
+}
 
-		// Fallback
-		if len(blocks) == 0 {
-			return []cdx.Component{finding.getGenericSecretComponent()}, nil
-		}
-
-		for block := range blocks {
-			currentComponents, err := pemutility.GenerateComponentsFromPEMKeyBlock(block)
-			if err != nil {
-				return []cdx.Component{}, err
-			}
-
-			for i := range currentComponents {
-				if currentComponents[i].Description != "" {
-					currentComponents[i].Description += "; "
-				}
-				currentComponents[i].Description += finding.Description
-				currentComponents[i].MIMEType = finding.mime
-				currentComponents[i].Evidence = &cdx.Evidence{
-					Occurrences: &[]cdx.EvidenceOccurrence{
-						{
-							Location: finding.File,
-							Line:     &finding.StartLine,
-						},
-					},
-				}
-			}
-			return currentComponents, nil
-		}
+func (finding findingWithMetadata) getPrivateKeyComponent() ([]cdx.Component, error) {
+	// Filter for private keys only
+	privateKeyFilter := pemlib.Filter{
+		FilterType: pemlib.PEMTypeFilterTypeAllowlist,
+		List: []pemlib.PEMBlockType{
+			pemlib.PEMBlockTypePrivateKey,
+			pemlib.PEMBlockTypeEncryptedPrivateKey,
+			pemlib.PEMBlockTypeRSAPrivateKey,
+			pemlib.PEMBlockTypeECPrivateKey,
+			pemlib.PEMBlockTypeOPENSSHPrivateKey,
+		},
 	}
 
-	return []cdx.Component{finding.getGenericSecretComponent()}, nil
+	// Parse PEM blocks
+	blocks := pemlib.ParsePEMToBlocksWithTypeFilter(finding.raw, privateKeyFilter)
+	if len(blocks) == 0 {
+		return []cdx.Component{finding.getGenericSecretComponent()}, nil
+	}
+
+	log.Infof("Found %d private key(s) in %s", len(blocks), finding.File)
+
+	components := make([]cdx.Component, 0)
+	for block := range blocks {
+		currentComponents, err := pemlib.GenerateComponentsFromPEMKeyBlock(block)
+		if err != nil {
+			continue
+		}
+
+		for i := range currentComponents {
+			description := currentComponents[i].Description
+			if description != "" {
+				currentComponents[i].Description = strings.Join([]string{description, finding.Description}, ";")
+			} else {
+				currentComponents[i].Description = finding.Description
+			}
+			currentComponents[i].Evidence = &cdx.Evidence{
+				Occurrences: &[]cdx.EvidenceOccurrence{
+					{
+						Location: finding.File,
+						Line:     &finding.StartLine,
+					},
+				},
+			}
+		}
+		components = append(components, currentComponents...)
+	}
+	return components, nil
 }
 
 func (finding findingWithMetadata) getGenericSecretComponent() cdx.Component {
@@ -191,9 +213,10 @@ func (finding findingWithMetadata) getGenericSecretComponent() cdx.Component {
 
 func getRelatedCryptoAssetTypeFromRuleID(id string) cdx.RelatedCryptoMaterialType {
 	switch {
-	case id == "private-key":
+	case strings.Contains(id, "private-key"):
 		return cdx.RelatedCryptoMaterialTypePrivateKey
-	case strings.Contains(id, "token") || strings.Contains(id, "jwt"):
+	case strings.Contains(id, "token") ||
+		strings.Contains(id, "jwt"):
 		return cdx.RelatedCryptoMaterialTypeToken
 	case strings.Contains(id, "key"):
 		return cdx.RelatedCryptoMaterialTypeKey
