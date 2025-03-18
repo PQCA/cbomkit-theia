@@ -52,10 +52,10 @@ Find x.509 certificates
 
 > "javasecurity": java.security Plugin
 Verify the executability of cryptographic assets from Java code
-Adds a confidence level (0-100) to the CBOM components to show how likely it is that this component is actually executable
+Adds a confidence level (0-1) to the CBOM components to show how likely it is that this component is actually executable
 
-> "secrets": Secret Plugin
-Find Secrets & Keys
+> "secrets": Secret Detection Plugin
+Find secrets & keys (private, public and secret keys)
 
 Usage:
   cbomkit-theia [command]
@@ -70,7 +70,7 @@ Flags:
   -b, --bom string        BOM file to be verified and enriched
       --config string     config file (default is $HOME/.cbomkit-theia.yaml)
   -h, --help              help for cbomkit-theia
-  -p, --plugins strings   list of plugins to use (default [certificates,javasecurity,secrets])
+  -p, --plugins strings   list of plugins to use (default [certificates,javasecurity,secrets,keys,vex])
       --schema string     BOM schema to validate the given BOM (default "provider/cyclonedx/bom-1.6.schema.json")
 
 Use "cbomkit-theia [command] --help" for more information about a command.
@@ -79,7 +79,7 @@ Use "cbomkit-theia [command] --help" for more information about a command.
 ## Prerequisites
 
 - Go 
-  - Version: `1.23` or up
+  - Version: `1.24` or up
 - Docker (or similar container runtimes)
   - Recommended: Set the `DOCKER_HOST` environment variable (default: `unix:///var/run/docker.sock`)
 
@@ -101,6 +101,24 @@ go build
 ./cbomkit-theia [command] > enriched_CBOM.json
 ```
 
+## Configuration
+
+CBOMkit-theia reads its configuration from `$HOME/.cbomkit-theia/config.yaml`. This file is automatically created on first run.
+
+### Plugins
+
+By default, all available plugins are enabled:
+- certificates
+- javasecurity
+- secrets (private, public and secret keys)
+
+**Important Note:** The application is configured to ensure all plugins are always available. If you manually edit the configuration file to exclude specific plugins, CBOMkit-theia will detect this and automatically restore all plugins to their default enabled state on the next run. If you need to disable specific plugins for a particular run, use the `-p` flag instead of modifying the config file:
+
+```shell
+# Run with only specific plugins
+./cbomkit-theia image nginx -p certificates -p secrets
+```
+
 ## Development
 
 ### Plugins
@@ -114,7 +132,7 @@ go build
     - Add the certificates to the CBOM, as well as signature algorithms, public keys and public key algorithms
   - Secret Plugin:
     - Leverages [gitleaks](https://github.com/gitleaks/gitleaks) to find secrets and keys in the data source
-    - Adds the secrets and keys to the CBOM
+    - Add the secrets and keys (private, public and secret keys) to the CBOM
 
 Additional plugins can be added by implementing the `Plugin` interface from [`ibm/cbomkit-theia/scanner/plugins`](./scanner/plugins/plugin.go#L41) and adding the plugins constructor to the `GetAllPluginConstructors` function in [`ibm/cbomkit-theia/scanner/scanner.go`](./scanner/scanner.go#L58): 
 

@@ -131,7 +131,7 @@ func GenerateComponentsFromPEMKeyBlock(block *pem.Block) ([]cdx.Component, error
 		if err != nil {
 			return []cdx.Component{}, err
 		}
-		return []cdx.Component{getRSAPrivateKeyComponent(), getRSAPublicKeyComponent(&key.PublicKey)}, nil
+		return []cdx.Component{getRSAPrivateKeyComponent(key), getRSAPublicKeyComponent(&key.PublicKey)}, nil
 
 	case PEMBlockTypePublicKey:
 		genericKey, err := x509.ParsePKIXPublicKey(block.Bytes)
@@ -168,17 +168,17 @@ func GenerateComponentsFromKey(genericKey any) ([]cdx.Component, error) {
 	case *ecdsa.PublicKey:
 		return []cdx.Component{getECDSAPublicKeyComponent(key)}, nil
 	case *ed25519.PublicKey:
-		return []cdx.Component{getED25519PublicKeyComponent(*key)}, nil
+		return []cdx.Component{getED25519PublicKeyComponent(key)}, nil
 	case *ecdh.PublicKey:
 		return []cdx.Component{getECDHPublicKeyComponent(key)}, nil
 	case *rsa.PrivateKey:
-		return []cdx.Component{getRSAPrivateKeyComponent(), getRSAPublicKeyComponent(&key.PublicKey)}, nil
+		return []cdx.Component{getRSAPrivateKeyComponent(key)}, nil
 	case *ecdsa.PrivateKey:
-		return []cdx.Component{getECDSAPrivateKeyComponent(key), getECDSAPublicKeyComponent(&key.PublicKey)}, nil
+		return []cdx.Component{getECDSAPrivateKeyComponent(key)}, nil
 	case ed25519.PrivateKey:
-		return []cdx.Component{getED25519PrivateKeyComponent(), getED25519PublicKeyComponent(key.Public().(ed25519.PublicKey))}, nil
+		return []cdx.Component{getED25519PrivateKeyComponent()}, nil
 	case *ecdh.PrivateKey:
-		return []cdx.Component{getECDHPrivateKeyComponent(), getECDHPublicKeyComponent(key.Public().(*ecdh.PublicKey))}, nil
+		return []cdx.Component{getECDHPrivateKeyComponent()}, nil
 	default:
 		return []cdx.Component{}, errUnknownKeyAlgorithm
 	}
@@ -191,6 +191,7 @@ func getGenericKeyComponent() cdx.Component {
 		CryptoProperties: &cdx.CryptoProperties{
 			AssetType: cdx.CryptoAssetTypeRelatedCryptoMaterial,
 			RelatedCryptoMaterialProperties: &cdx.RelatedCryptoMaterialProperties{
+				Type:   cdx.RelatedCryptoMaterialTypeKey,
 				Format: "PEM",
 			},
 		},
@@ -211,7 +212,7 @@ func getGenericPrivateKeyComponent() cdx.Component {
 
 func getRSAPublicKeyComponent(key *rsa.PublicKey) cdx.Component {
 	c := getGenericPublicKeyComponent()
-	size := key.Size() * 8
+	size := key.Size() * 8 // byte
 	c.Name = fmt.Sprintf("RSA-%v", size)
 	c.CryptoProperties.RelatedCryptoMaterialProperties.Size = &size
 	c.CryptoProperties.OID = "1.2.840.113549.1.1.1"
@@ -222,9 +223,12 @@ func getRSAPublicKeyComponent(key *rsa.PublicKey) cdx.Component {
 	return c
 }
 
-func getRSAPrivateKeyComponent() cdx.Component {
+func getRSAPrivateKeyComponent(key *rsa.PrivateKey) cdx.Component {
 	c := getGenericPrivateKeyComponent()
 	c.Name = "RSA"
+	size := key.PublicKey.Size() * 8 // byte
+	c.Name = fmt.Sprintf("RSA-%v", size)
+	c.CryptoProperties.RelatedCryptoMaterialProperties.Size = &size
 	c.CryptoProperties.OID = "1.2.840.113549.1.1.1"
 	return c
 }
@@ -232,7 +236,6 @@ func getRSAPrivateKeyComponent() cdx.Component {
 func getECDSAPublicKeyComponent(key *ecdsa.PublicKey) cdx.Component {
 	c := getGenericPublicKeyComponent()
 	c.Name = "ECDSA"
-	c.Description = fmt.Sprintf("Curve: %v", key.Curve.Params().Name)
 	c.CryptoProperties.OID = "1.2.840.10045.2.1"
 	keyValue, err := x509.MarshalPKIXPublicKey(key)
 	if err == nil {
@@ -248,10 +251,10 @@ func getECDSAPrivateKeyComponent(key *ecdsa.PrivateKey) cdx.Component {
 	return c
 }
 
-func getED25519PublicKeyComponent(key ed25519.PublicKey) cdx.Component {
+func getED25519PublicKeyComponent(key *ed25519.PublicKey) cdx.Component {
 	c := getGenericPublicKeyComponent()
 	c.Name = "ED25519"
-	size := len([]byte(key)) * 8
+	size := len([]byte(*key)) * 8
 	c.CryptoProperties.RelatedCryptoMaterialProperties.Size = &size
 	keyValue, err := x509.MarshalPKIXPublicKey(key)
 	if err == nil {
