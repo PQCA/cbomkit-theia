@@ -183,7 +183,7 @@ func (scanner *scanner) addMetadata(bom *cdx.BOM) {
 			Name: "IBM",
 		},
 		Name:     "CBOMkit-theia",
-		Version:  "1.0",
+		Version:  "1.0.1",
 		Services: &pluginServices,
 	})
 }
