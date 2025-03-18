@@ -26,7 +26,6 @@ import (
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
-	"github.com/gabriel-vasile/mimetype"
 	"github.com/zricethezav/gitleaks/v8/detect"
 	"github.com/zricethezav/gitleaks/v8/report"
 )
@@ -51,8 +50,7 @@ func (*Plugin) GetType() plugins.PluginType {
 
 type findingWithMetadata struct {
 	report.Finding
-	mime string
-	raw  []byte
+	raw []byte
 }
 
 func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
@@ -74,14 +72,6 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 			return nil // skip and continue
 		}
 
-		mime, err := mimetype.DetectReader(readCloser)
-		if err != nil {
-			return nil // skip and continue
-		}
-		if !(strings.HasPrefix(mime.String(), "text") || mime.Parent() != nil && strings.HasPrefix(mime.Parent().String(), "text")) {
-			return nil // skip and continue
-		}
-
 		content, err := filesystem.ReadAllAndClose(readCloser)
 		if err != nil {
 			log.WithField("path", path).Warn("Unable to read file")
@@ -98,7 +88,6 @@ func (*Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 		for _, finding := range detector.Detect(fragment) {
 			findings = append(findings, findingWithMetadata{
 				Finding: finding,
-				mime:    strings.Split(mime.String(), ";")[0],
 				raw:     content,
 			})
 			log.WithFields(log.Fields{
@@ -193,7 +182,6 @@ func (finding findingWithMetadata) getGenericSecretComponent() cdx.Component {
 		Name:        finding.RuleID,
 		Description: finding.Description,
 		Type:        cdx.ComponentTypeCryptographicAsset,
-		MIMEType:    finding.mime,
 		CryptoProperties: &cdx.CryptoProperties{
 			AssetType: cdx.CryptoAssetTypeRelatedCryptoMaterial,
 			RelatedCryptoMaterialProperties: &cdx.RelatedCryptoMaterialProperties{

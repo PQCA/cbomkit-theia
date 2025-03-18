@@ -87,7 +87,7 @@ func (plugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
 	for _, component := range *bom.Components {
 		err := javaSecurityFile.updateComponent(&component, bom.Components)
 		if err != nil {
-			log.WithError(err).Errorf("Error while updating component %v\n", component.Name)
+			log.WithError(err).Warnf("Error while updating component %v", component.Name)
 			continue
 		}
 	}
@@ -260,7 +260,7 @@ func (javaSecurity *JavaSecurity) analyse(fs filesystem.Filesystem) error {
 func (*JavaSecurity) isComponentAffectedByConfig(component *cdx.Component) (bool, error) {
 	if component.Evidence == nil || component.Evidence.Occurrences == nil { // If there is no evidence telling us that whether this component comes from a java file,
 		// we cannot assess it
-		return false, scannererrors.GetInsufficientInformationError("Cannot allowed due to missing evidence/occurrences in BOM", "java.security Plugin", "component", component.Name)
+		return false, scannererrors.GetInsufficientInformationError("Cannot allowed due to missing evidence/occurrences in BOM", component.Name)
 	}
 
 	for _, occurrence := range *component.Evidence.Occurrences {
@@ -281,7 +281,7 @@ func (javaSecurity *JavaSecurity) updateComponent(component *cdx.Component, comp
 	log.WithFields(log.Fields{
 		"component": component.Name,
 		"bom-ref":   component.BOMRef,
-	}).Debug("component is effect by java.security file")
+	}).Info("component is effect by java.security file")
 
 	allowed, restrictionResult, err := isAllowed(component, components, javaSecurity)
 	if err != nil {

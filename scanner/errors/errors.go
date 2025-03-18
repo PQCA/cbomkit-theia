@@ -28,8 +28,8 @@ var ErrInsufficientInformation = errors.New("insufficient information to continu
 
 // GetInsufficientInformationError Error to represent cases in which a plugin had
 // to interrupt its execution due to missing information (e.g., in the BOM or in the filesystem)
-func GetInsufficientInformationError(msg string, plugin string, affectedObjectType string, affectedObjectName string) error {
-	return fmt.Errorf("%w: (%v:%v:%v) %v", ErrInsufficientInformation, plugin, affectedObjectType, affectedObjectName, msg)
+func GetInsufficientInformationError(msg string, componentName string) error {
+	return fmt.Errorf("%w: (%v) %v", ErrInsufficientInformation, componentName, msg)
 }
 
 // ErrParsingFailedAlthoughChecked Error
