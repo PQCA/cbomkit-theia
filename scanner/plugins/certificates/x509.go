@@ -380,7 +380,6 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getPublicKeyAlgo
 	case x509.Ed25519:
 		return getEd25519AlgorithmComponent(x509CertificateWithMetadata.path), nil
 	default:
-		// TODO ECDH?
 		return cdx.Component{}, errX509UnknownAlgorithm
 	}
 }
