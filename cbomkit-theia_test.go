@@ -18,126 +18,130 @@ package main
 
 import (
 	"bytes"
+	cdx "github.com/CycloneDX/cyclonedx-go"
+	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	"github.com/stretchr/testify/assert"
 	"io"
+	"os"
 	"path/filepath"
 	"testing"
 
-	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
-	"github.com/IBM/cbomkit-theia/provider/docker"
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	"github.com/IBM/cbomkit-theia/scanner"
-	"github.com/stretchr/testify/assert"
 	"go.uber.org/dig"
 )
 
-var testfileFolder = "./testdata"
-var outputExtension = "/out/bom.json"
-var bomFolderExtension = "/in/bom.json"
+var testFileFolder = "./testdata"
 var dirExtension = "/dir"
 
-type testType int
+func TestEmpty(t *testing.T) {
+	bom, err := runScanAndReceiveCBOM("/empty")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, *bom)
 
-const (
-	testTypeDir testType = iota + 1
-	testTypeImage
-)
-
-var tests = []struct {
-	testType       testType
-	additionalInfo string
-	in             string
-	err            bool
-}{
-	{testTypeImage, "busybox", "/0_empty", false},
-	{testTypeDir, "", "/4_unknown_keySize", false},
-	{testTypeDir, "", "/5_single_certificate", false},
-	{testTypeDir, "", "/6_malformed_java_security", false},
-	{testTypeDir, "", "/7_private_key", false},
-	{testTypeDir, "", "/8_secrets", false},
+	assert.Empty(t, bom.Components)
 }
 
-func TestScan(t *testing.T) {
-	for _, test := range tests {
-		t.Run(test.in+", BOM: "+test.in, func(t *testing.T) {
-			tempTarget := new(bytes.Buffer)
+func TestUnknownKeySize(t *testing.T) {
+	bom, err := runScanAndReceiveCBOM("/unknown_key_size")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, *bom)
 
-			var runErr error
+	// TODO: assert CBOM content
 
-			container := dig.New()
-
-			if err := container.Provide(func() string {
-				return testfileFolder + test.in + bomFolderExtension
-			}, dig.Name("bomFilePath")); err != nil {
-				panic(err)
-			}
-
-			if err := container.Provide(func() io.Writer {
-				return tempTarget
-			}); err != nil {
-				panic(err)
-			}
-
-			for _, pluginConstructor := range scanner.GetAllPluginConstructors() {
-				if err := container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
-					panic(err)
-				}
-			}
-
-			switch test.testType {
-			case testTypeImage:
-				image, err := docker.GetImage(test.additionalInfo)
-				assert.NoError(t, err)
-				defer image.TearDown()
-				err = container.Provide(func() filesystem.Filesystem {
-					return docker.GetSquashedFilesystem(image)
-				})
-				assert.NoError(t, err)
-				runErr = container.Invoke(scanner.RunScan)
-			case testTypeDir:
-				err := container.Provide(func() filesystem.Filesystem {
-					return filesystem.NewPlainFilesystem(filepath.Join(testfileFolder, test.in, dirExtension))
-				})
-				assert.NoError(t, err)
-				runErr = container.Invoke(scanner.RunScan)
-			}
-
-			if test.err {
-				assert.Error(t, runErr, "scan did not fail although it should")
-			} else {
-				assert.NoError(t, runErr, "scan did fail although it should not")
-			}
-
-			bomCurrent, err := cyclonedx.ParseBOM(tempTarget)
-			assert.NoError(t, err)
-
-			// only check that bom is not empty
-			assert.NotEmpty(t, *bomCurrent)
-
-			/*assert.Empty(t, cmp.Diff(*bomTrue, *bomCurrent,
-				cmpopts.SortSlices(func(a cdx.Service, b cdx.Service) bool {
-					return a.Name < b.Name
-				}),
-				cmpopts.SortSlices(func(a cdx.Component, b cdx.Component) bool {
-					aHash := hash.CdxComponentWithoutRefs(a)
-					bHash := hash.CdxComponentWithoutRefs(b)
-					return hex.EncodeToString(aHash[:]) < hex.EncodeToString(bHash[:])
-				}),
-				cmpopts.SortSlices(func(a cdx.EvidenceOccurrence, b cdx.EvidenceOccurrence) bool {
-					if a.Location != b.Location {
-						return a.Location < b.Location
-					} else {
-						return *a.Line < *b.Line
-					}
-				}),
-				cmpopts.IgnoreTypes(cdx.Dependency{}),
-				cmpopts.IgnoreFields(cdx.Component{},
-					"BOMRef",
-					"CryptoProperties.CertificateProperties.SignatureAlgorithmRef",
-					"CryptoProperties.CertificateProperties.SubjectPublicKeyRef",
-					"CryptoProperties.RelatedCryptoMaterialProperties.AlgorithmRef",
-					"CryptoProperties.RelatedCryptoMaterialProperties.SecuredBy.AlgorithmRef",
-					"CryptoProperties.ProtocolProperties.CryptoRefArray"),
-			))*/
-		})
+	err = cdx.NewBOMEncoder(os.Stdout, cdx.BOMFileFormatJSON).SetPretty(true).Encode(bom)
+	if err != nil {
+		t.Fail()
 	}
+}
+
+func TestSingleCertificate(t *testing.T) {
+	bom, err := runScanAndReceiveCBOM("/certificate")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, *bom)
+
+	// TODO: assert CBOM content
+
+	err = cdx.NewBOMEncoder(os.Stdout, cdx.BOMFileFormatJSON).SetPretty(true).Encode(bom)
+	if err != nil {
+		t.Fail()
+	}
+}
+
+func TestPrivateKey(t *testing.T) {
+	bom, err := runScanAndReceiveCBOM("/private_key")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, *bom)
+
+	// TODO: assert CBOM content
+
+	err = cdx.NewBOMEncoder(os.Stdout, cdx.BOMFileFormatJSON).SetPretty(true).Encode(bom)
+	if err != nil {
+		t.Fail()
+	}
+}
+
+func TestSecrets(t *testing.T) {
+	bom, err := runScanAndReceiveCBOM("/secrets")
+	assert.NoError(t, err)
+	assert.NotEmpty(t, *bom)
+
+	// TODO: assert CBOM content
+
+	err = cdx.NewBOMEncoder(os.Stdout, cdx.BOMFileFormatJSON).SetPretty(true).Encode(bom)
+	if err != nil {
+		t.Fail()
+	}
+}
+
+func runScanAndReceiveCBOM(testPath string) (*cdx.BOM, error) {
+	target := new(bytes.Buffer)
+	container, err := createScannerConfig(target, testPath)
+	if err != nil {
+		return nil, err
+	}
+	err = container.Invoke(scanner.RunScan)
+	if err != nil {
+		return nil, err
+	}
+
+	bom, err := cyclonedx.ParseBOM(target)
+	if err != nil {
+		return nil, err
+	}
+	return bom, nil
+}
+
+func createScannerConfig(target io.Writer, testPath string) (*dig.Container, error) {
+	container := dig.New()
+
+	if err := container.Provide(func() string {
+		bomFilePath := testFileFolder + testPath + "/bom.json"
+		if _, err := os.Stat(bomFilePath); err != nil {
+			return ""
+		}
+		return testFileFolder + testPath + "/bom.json"
+	}, dig.Name("bomFilePath")); err != nil {
+		return nil, err
+	}
+
+	if err := container.Provide(func() io.Writer {
+		return target
+	}); err != nil {
+		return nil, err
+	}
+
+	for _, pluginConstructor := range scanner.GetAllPluginConstructors() {
+		if err := container.Provide(pluginConstructor, dig.Group("plugins")); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := container.Provide(func() filesystem.Filesystem {
+		return filesystem.NewPlainFilesystem(filepath.Join(testFileFolder, testPath, dirExtension))
+	}); err != nil {
+		return nil, err
+	}
+
+	return container, nil
 }

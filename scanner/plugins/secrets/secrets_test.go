@@ -27,7 +27,6 @@ func TestPrivateKey(t *testing.T) {
 
 	findingWithMeta := findingWithMetadata{
 		Finding: privateKey,
-		mime:    "key",
 		raw:     []byte(privateKeyRaw),
 	}
 
