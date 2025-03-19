@@ -103,7 +103,6 @@ func updateAlgorithmComponent(component *cdx.Component, components *[]cdx.Compon
 	for _, algorithmRestriction := range algorithmRestrictions {
 		allowed, err := algorithmRestriction.allowed(component)
 		if err != nil {
-			log.WithError(err).Error("An error occurred when trying to validate restriction")
 			continue
 		}
 
@@ -129,7 +128,6 @@ func updateTLSComponent(component *cdx.Component, components *[]cdx.Component, a
 		for _, algorithmRestriction := range algorithmRestrictions {
 			allowed, err := algorithmRestriction.allowed(component)
 			if err != nil {
-				log.WithError(err).Error("An error occurred when trying to validate restriction")
 				continue
 			}
 
@@ -153,7 +151,6 @@ func updateTLSComponent(component *cdx.Component, components *[]cdx.Component, a
 			for _, algorithmRestriction := range algorithmRestrictions {
 				allowed, err := algorithmRestriction.allowed(algorithmComponent)
 				if err != nil {
-					log.WithError(err).Error("An error occurred when trying to validate restriction")
 					continue
 				}
 
@@ -206,13 +203,13 @@ func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component *
 		restrictionStandardized, subAlgorithmStandardized := utils.StandardizeString(javaSecurityAlgorithmRestriction.algorithm), utils.StandardizeString(subAlgorithm)
 		if strings.EqualFold(restrictionStandardized, subAlgorithmStandardized) {
 			if component.CryptoProperties.AlgorithmProperties == nil {
-				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing algorithm properties in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), "java.security", "component", component.Name)
+				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing algorithm properties in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), component.Name)
 			}
 
 			// There is no need to test further if the component does not provide a keySize
 			if component.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier == "" {
 				if javaSecurityAlgorithmRestriction.keySizeOperator != keySizeOperatorNone {
-					return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), "java.security", "component", component.Name) // We actually need a keySize so we cannot go on here
+					return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), component.Name) // We actually need a keySize so we cannot go on here
 				} else {
 					return false, nil // Names match, and we do not need a keySize --> The algorithm is not allowed!
 				}
@@ -221,7 +218,7 @@ func (javaSecurityAlgorithmRestriction AlgorithmRestriction) allowed(component *
 			// Parsing the key size
 			param, err := strconv.Atoi(component.CryptoProperties.AlgorithmProperties.ParameterSetIdentifier)
 			if err != nil {
-				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), "java.security", "component", component.Name) // We actually need a keySize so we cannot go on here
+				return false, scannererrors.GetInsufficientInformationError(fmt.Sprintf("missing key size parameter in BOM for rule affecting %v", javaSecurityAlgorithmRestriction.algorithm), component.Name) // We actually need a keySize so we cannot go on here
 			}
 
 			if param <= 0 || param > 2147483647 {
