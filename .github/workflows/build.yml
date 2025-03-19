@@ -60,10 +60,3 @@ jobs:
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-    - name: Update dependency graph
-      if: github.event_name != 'pull_request'
-      uses: advanced-security/maven-dependency-submission-action@v4
-
-        
-
