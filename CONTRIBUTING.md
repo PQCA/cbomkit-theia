@@ -46,4 +46,4 @@ To run all unit- and system tests, simply run:
 go test ./...
 ```
 
-If any of the tests fail, please investigate. Either fix your code or regenerate the testdata using the [script](./regenerate_test_output.sh). Feel free to open an issue if you believe that the test code is faulty.
+If any of the tests fail, please investigate. Either fix your code or feel free to open an issue if you believe that the test code is faulty.
