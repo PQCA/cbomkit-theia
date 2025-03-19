@@ -260,7 +260,7 @@ func (javaSecurity *JavaSecurity) analyse(fs filesystem.Filesystem) error {
 func (*JavaSecurity) isComponentAffectedByConfig(component *cdx.Component) (bool, error) {
 	if component.Evidence == nil || component.Evidence.Occurrences == nil { // If there is no evidence telling us that whether this component comes from a java file,
 		// we cannot assess it
-		return false, scannererrors.GetInsufficientInformationError("Cannot allowed due to missing evidence/occurrences in BOM", component.Name)
+		return false, scannererrors.GetInsufficientInformationError("Unable to process due to missing evidence/occurrences in BOM", component.Name)
 	}
 
 	for _, occurrence := range *component.Evidence.Occurrences {
@@ -281,7 +281,7 @@ func (javaSecurity *JavaSecurity) updateComponent(component *cdx.Component, comp
 	log.WithFields(log.Fields{
 		"component": component.Name,
 		"bom-ref":   component.BOMRef,
-	}).Info("component is effect by java.security file")
+	}).Info("component is affected by java.security file")
 
 	allowed, restrictionResult, err := isAllowed(component, components, javaSecurity)
 	if err != nil {
