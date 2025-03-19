@@ -34,6 +34,8 @@ import (
 	"go.uber.org/dig"
 )
 
+var Version = "edge"
+
 type ParameterStruct struct {
 	dig.In
 	Fs          filesystem.Filesystem
@@ -182,8 +184,8 @@ func (scanner *scanner) addMetadata(bom *cdx.BOM) {
 		Provider: &cdx.OrganizationalEntity{
 			Name: "IBM",
 		},
-		Name:     "CBOMkit-theia",
-		Version:  "1.0",
+		Name:     "cbomkit-theia",
+		Version:  Version,
 		Services: &pluginServices,
 	})
 }
