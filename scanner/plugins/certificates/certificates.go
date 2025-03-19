@@ -20,6 +20,7 @@ import (
 	"encoding/pem"
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
 	log "github.com/sirupsen/logrus"
+	"github.com/smallstep/pkcs7"
 	"os"
 	"path/filepath"
 	"strings"
@@ -28,8 +29,6 @@ import (
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
 	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
-
-	"go.mozilla.org/pkcs7"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
