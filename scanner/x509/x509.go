@@ -14,55 +14,52 @@
 //
 // SPDX-License-Identifier: Apache-2.0
 
-package certificates
+package x509
 
 import (
 	"crypto/x509"
-	"errors"
 	"fmt"
 	"path/filepath"
 	"time"
 
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
+	"github.com/IBM/cbomkit-theia/scanner/errors"
+	"github.com/IBM/cbomkit-theia/scanner/key"
 
 	"github.com/google/uuid"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
 )
 
-// An X.509 certificate with additional metadata that is not part of the x509.Certificate struct
-type x509CertificateWithMetadata struct {
+// CertificateWithMetadata An X.509 certificate with additional metadata that is not part of the x509.Certificate struct
+type CertificateWithMetadata struct {
 	*x509.Certificate
 	path   string
 	format string
 }
 
-// During parsing of the x509.Certificate an unknown algorithm was found
-var errX509UnknownAlgorithm = errors.New("x.509 certificate has unknown algorithm")
-
-// Create a new x509CertificateWithMetadata from a x509.Certificate and a path
-func newX509CertificateWithMetadata(cert *x509.Certificate, path string) (*x509CertificateWithMetadata, error) {
+// NewX509CertificateWithMetadata Create a new x509CertificateWithMetadata from a x509.Certificate and a path
+func NewX509CertificateWithMetadata(cert *x509.Certificate, path string) (*CertificateWithMetadata, error) {
 	if cert == nil {
 		return nil, fmt.Errorf("certificate is nil")
 	}
-	return &x509CertificateWithMetadata{
+	return &CertificateWithMetadata{
 		cert,
 		path,
 		"X.509",
 	}, nil
 }
 
-// Convenience function to parse der bytes into a slice of x509CertificateWithMetadata
-func parseCertificatesToX509CertificateWithMetadata(der []byte, path string) ([]*x509CertificateWithMetadata, error) {
+// ParseCertificatesToX509CertificateWithMetadata Convenience function to parse der bytes into a slice of x509CertificateWithMetadata
+func ParseCertificatesToX509CertificateWithMetadata(der []byte, path string) ([]*CertificateWithMetadata, error) {
 	certs, err := x509.ParseCertificates(der)
 	if err != nil {
-		return make([]*x509CertificateWithMetadata, 0), err
+		return make([]*CertificateWithMetadata, 0), err
 	}
 
-	certsWithMetadata := make([]*x509CertificateWithMetadata, 0, len(certs))
+	certsWithMetadata := make([]*CertificateWithMetadata, 0, len(certs))
 
 	for _, cert := range certs {
-		certWithMetadata, err := newX509CertificateWithMetadata(cert, path)
+		certWithMetadata, err := NewX509CertificateWithMetadata(cert, path)
 		if err != nil {
 			return certsWithMetadata, err
 		}
@@ -72,17 +69,17 @@ func parseCertificatesToX509CertificateWithMetadata(der []byte, path string) ([]
 	return certsWithMetadata, err
 }
 
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) GetCDXComponents() (*[]cdx.Component, *map[cdx.BOMReference][]string, error) {
+func GenerateCdxComponents(certificateWithMetadata *CertificateWithMetadata) (*[]cdx.Component, *map[cdx.BOMReference][]string, error) {
 	// Creating BOM Components
 	components := make([]cdx.Component, 0)
 	dependencyMap := make(map[cdx.BOMReference][]string)
-	// model the certificate algorithm as cdx component
-	certificate := x509CertificateWithMetadata.getCertificateComponent()
 
+	// model the certificate algorithm as cdx component
+	certificate := certificateWithMetadata.getCertificateComponent()
 	// model the algorithm with which the issuer signed the certificate as a cdx component graph.
 	// For example, a SHA256-RSA-signed cert results in (1) "SHA256-RSA", (2) "RSA", and (3) "SHA256" components,
 	// with a dependency that (1) dependsOn (2) and (3).
-	signatureAlgorithm, err := x509CertificateWithMetadata.getSignatureAlgorithmComponent()
+	signatureAlgorithm, err := certificateWithMetadata.getSignatureAlgorithmComponent()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,13 +96,13 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) GetCDXComponents
 		components = append(components, *signatureAlgorithm.hashAndSignature)
 	}
 	// model the algorithm corresponding to the public key on the certificate
-	publicKeyAlgorithm, err := x509CertificateWithMetadata.getPublicKeyAlgorithmComponent()
+	publicKeyAlgorithm, err := certificateWithMetadata.getPublicKeyAlgorithmComponent()
 	if err != nil {
 		return nil, nil, err
 	}
 	components = append(components, publicKeyAlgorithm)
 	// model the public key
-	publicKey, err := x509CertificateWithMetadata.getPublicKeyComponent()
+	publicKey, err := certificateWithMetadata.getPublicKeyComponent()
 	if err != nil {
 		return nil, nil, err
 	}
@@ -120,7 +117,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) GetCDXComponents
 }
 
 // Generate the CycloneDX component for the certificate
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) getCertificateComponent() cdx.Component {
+func (x509CertificateWithMetadata *CertificateWithMetadata) getCertificateComponent() cdx.Component {
 	return cdx.Component{
 		Type:   cdx.ComponentTypeCryptographicAsset,
 		Name:   x509CertificateWithMetadata.Subject.CommonName,
@@ -153,7 +150,7 @@ type signatureAlgorithmResult struct {
 }
 
 // Generate the CycloneDX components for the algorithm used by the issuer to sign this certificate
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgorithmComponent() (signatureAlgorithmResult, error) {
+func (x509CertificateWithMetadata *CertificateWithMetadata) getSignatureAlgorithmComponent() (signatureAlgorithmResult, error) {
 	path := x509CertificateWithMetadata.path
 	hashAndSignature := getGenericSignatureAlgorithmComponent(path)
 	hashAndSignature.Name = x509CertificateWithMetadata.SignatureAlgorithm.String()
@@ -343,33 +340,27 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 			hashAndSignature: nil,
 			hash:             nil,
 			signature:        nil,
-		}, errX509UnknownAlgorithm
+		}, errors.ErrX509UnknownAlgorithm
 	}
 }
 
 // Generate the CycloneDX component for the public key
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) getPublicKeyComponent() (cdx.Component, error) {
-	comps, err := pemutility.GenerateComponentsFromKey(x509CertificateWithMetadata.PublicKey)
+func (x509CertificateWithMetadata *CertificateWithMetadata) getPublicKeyComponent() (cdx.Component, error) {
+	component, err := key.GenerateCdxComponent(x509CertificateWithMetadata.PublicKey)
 	if err != nil {
 		return cdx.Component{}, err
 	}
 
-	if len(comps) > 1 {
-		return cdx.Component{}, fmt.Errorf("certificate plugin: parsed several components from a single key. this should not happen. Check if getPublicKeyComponent gets only public keys")
-	}
-
-	comp := comps[0]
-	comp.Evidence = &cdx.Evidence{
+	component.Evidence = &cdx.Evidence{
 		Occurrences: &[]cdx.EvidenceOccurrence{
 			{Location: x509CertificateWithMetadata.path},
 		},
 	}
-
-	return comp, nil
+	return *component, nil
 }
 
 // Generate the CycloneDX component for the algorithm corresponding to the public key on this certificate
-func (x509CertificateWithMetadata *x509CertificateWithMetadata) getPublicKeyAlgorithmComponent() (cdx.Component, error) {
+func (x509CertificateWithMetadata *CertificateWithMetadata) getPublicKeyAlgorithmComponent() (cdx.Component, error) {
 	switch x509CertificateWithMetadata.PublicKeyAlgorithm {
 	case x509.RSA:
 		keyUsage := x509CertificateWithMetadata.KeyUsage
@@ -391,7 +382,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getPublicKeyAlgo
 	case x509.Ed25519:
 		return getEd25519AlgorithmComponent(x509CertificateWithMetadata.path), nil
 	default:
-		return cdx.Component{}, errX509UnknownAlgorithm
+		return cdx.Component{}, errors.ErrX509UnknownAlgorithm
 	}
 }
 

@@ -26,7 +26,7 @@ jobs:
       run: go get .
     - name: Build and Test
       run: |
-        go build -v ./...
+        go build -ldflags "-X github.com/IBM/cbomkit-theia/scanner.Version=${{github.ref_name}}" -v ./...
         go test -v ./...
     - name: Extract metadata (tags, labels) for Docker
       id: meta
@@ -60,10 +60,3 @@ jobs:
         push: ${{ github.event_name != 'pull_request' }}
         tags: ${{ steps.meta.outputs.tags }}
         labels: ${{ steps.meta.outputs.labels }}
-        # Optional: Uploads the full dependency graph to GitHub to improve the quality of Dependabot alerts this repository can receive
-    - name: Update dependency graph
-      if: github.event_name != 'pull_request'
-      uses: advanced-security/maven-dependency-submission-action@v4
-
-        
-
