@@ -162,7 +162,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingPKCS1v15
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.2"
 		hash := getMD2AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -173,7 +173,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingPKCS1v15
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.4"
 		hash := getMD5AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -185,7 +185,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingPKCS1v15
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.5"
 		hash := getSHA1AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -197,7 +197,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingPKCS1v15
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.11"
 		hash := getSHA256AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -209,7 +209,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingPKCS1v15
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.12"
 		hash := getSHA384AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -221,7 +221,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingPKCS1v15
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.13"
 		hash := getSHA512AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -299,7 +299,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingOther
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.10"
 		hash := getSHA256AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -311,7 +311,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingOther
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.10"
 		hash := getSHA384AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -323,7 +323,7 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getSignatureAlgo
 		hashAndSignature.CryptoProperties.AlgorithmProperties.Padding = cdx.CryptoPaddingOther
 		hashAndSignature.CryptoProperties.OID = "1.2.840.113549.1.1.10"
 		hash := getSHA512AlgorithmComponent(path)
-		signature := getRSAAlgorithmComponent(path)
+		signature := getRSASignatureAlgorithmComponent(path)
 
 		return signatureAlgorithmResult{
 			hashAndSignature: &hashAndSignature,
@@ -372,7 +372,18 @@ func (x509CertificateWithMetadata *x509CertificateWithMetadata) getPublicKeyComp
 func (x509CertificateWithMetadata *x509CertificateWithMetadata) getPublicKeyAlgorithmComponent() (cdx.Component, error) {
 	switch x509CertificateWithMetadata.PublicKeyAlgorithm {
 	case x509.RSA:
-		return getRSAAlgorithmComponent(x509CertificateWithMetadata.path), nil
+		keyUsage := x509CertificateWithMetadata.KeyUsage
+		// If the Key Usage extension is present, includes a signature usage,
+		// and does not include "KeyEncipherment", we conclude it is a signature-only RSA key.
+		if keyUsage != 0 &&
+			(keyUsage&x509.KeyUsageDigitalSignature+
+				keyUsage&x509.KeyUsageCRLSign+
+				keyUsage&x509.KeyUsageCertSign > 0) &&
+			(keyUsage&x509.KeyUsageKeyEncipherment == 0) {
+			return getRSASignatureAlgorithmComponent(x509CertificateWithMetadata.path), nil
+
+		}
+		return getRSAPKEAlgorithmComponent(x509CertificateWithMetadata.path), nil
 	case x509.DSA:
 		return getDSAAlgorithmComponent(x509CertificateWithMetadata.path), nil
 	case x509.ECDSA:
@@ -427,7 +438,14 @@ func getSHA512AlgorithmComponent(path string) cdx.Component {
 	return comp
 }
 
-func getRSAAlgorithmComponent(path string) cdx.Component {
+func getRSASignatureAlgorithmComponent(path string) cdx.Component {
+	comp := getGenericSignatureAlgorithmComponent(path)
+	comp.Name = "RSA"
+	comp.CryptoProperties.OID = "1.2.840.113549.1.1.1"
+	return comp
+}
+
+func getRSAPKEAlgorithmComponent(path string) cdx.Component {
 	comp := getGenericPublicKeyAlgorithmComponent(path)
 	comp.Name = "RSA"
 	comp.CryptoProperties.AlgorithmProperties.Primitive = cdx.CryptoPrimitivePKE
