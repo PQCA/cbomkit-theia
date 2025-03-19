@@ -19,6 +19,7 @@ package certificates
 import (
 	"encoding/pem"
 	"github.com/IBM/cbomkit-theia/provider/cyclonedx"
+	"github.com/IBM/cbomkit-theia/scanner/x509"
 	log "github.com/sirupsen/logrus"
 	"github.com/smallstep/pkcs7"
 	"os"
@@ -27,7 +28,7 @@ import (
 
 	"github.com/IBM/cbomkit-theia/provider/filesystem"
 	scannererrors "github.com/IBM/cbomkit-theia/scanner/errors"
-	pemutility "github.com/IBM/cbomkit-theia/scanner/pem"
+	pemlib "github.com/IBM/cbomkit-theia/scanner/pem"
 	"github.com/IBM/cbomkit-theia/scanner/plugins"
 
 	cdx "github.com/CycloneDX/cyclonedx-go"
@@ -57,7 +58,7 @@ func NewCertificatePlugin() (plugins.Plugin, error) {
 
 // UpdateBOM Add the found certificates to the slice of components
 func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.BOM) error {
-	var certificates []*x509CertificateWithMetadata
+	var certificates []*x509.CertificateWithMetadata
 
 	// Set GODEBUG to allow negative serial numbers (see https://github.com/golang/go/commit/db13584baedce4909915cb4631555f6dbd7b8c38)
 	err := setX509NegativeSerial()
@@ -131,7 +132,7 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 	log.WithField("numberOfDetectedCertificates", len(certificates)).Info("Certificate searching done")
 
 	for _, cert := range certificates {
-		components, dependencyMap, err := cert.GetCDXComponents()
+		components, dependencyMap, err := x509.GenerateCdxComponents(cert)
 		if err != nil {
 			log.WithError(err).Error("Error while adding certificate data to bom")
 			continue
@@ -143,20 +144,20 @@ func (certificatesPlugin *Plugin) UpdateBOM(fs filesystem.Filesystem, bom *cdx.B
 }
 
 // Parse an X.509 certificate from the given path (in base64 PEM or binary DER)
-func parseX509CertFromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
-	blocks := pemutility.ParsePEMToBlocksWithTypeFilter(raw, pemutility.Filter{
-		FilterType: pemutility.PEMTypeFilterTypeAllowlist,
-		List:       []pemutility.PEMBlockType{pemutility.PEMBlockTypeCertificate},
+func parseX509CertFromPath(raw []byte, path string) ([]*x509.CertificateWithMetadata, error) {
+	blocks := pemlib.ParsePEMToBlocksWithTypeFilter(raw, pemlib.Filter{
+		FilterType: pemlib.TypeAllowlist,
+		List:       []pemlib.BlockType{pemlib.BlockTypeCertificate},
 	})
 
 	if len(blocks) == 0 {
-		return parseCertificatesToX509CertificateWithMetadata(raw, path)
+		return x509.ParseCertificatesToX509CertificateWithMetadata(raw, path)
 	}
 
-	certs := make([]*x509CertificateWithMetadata, 0, len(blocks))
+	certs := make([]*x509.CertificateWithMetadata, 0, len(blocks))
 
 	for block := range blocks {
-		moreCerts, err := parseCertificatesToX509CertificateWithMetadata(block.Bytes, path)
+		moreCerts, err := x509.ParseCertificatesToX509CertificateWithMetadata(block.Bytes, path)
 		if err != nil {
 			return moreCerts, err
 		}
@@ -167,20 +168,20 @@ func parseX509CertFromPath(raw []byte, path string) ([]*x509CertificateWithMetad
 }
 
 // Parse X.509 certificates from a PKCS7 file (base64 PEM format)
-func parsePKCS7FromPath(raw []byte, path string) ([]*x509CertificateWithMetadata, error) {
+func parsePKCS7FromPath(raw []byte, path string) ([]*x509.CertificateWithMetadata, error) {
 	block, _ := pem.Decode(raw)
 
 	pkcs7Object, err := pkcs7.Parse(block.Bytes)
 	if err != nil || pkcs7Object == nil {
-		return make([]*x509CertificateWithMetadata, 0), err
+		return make([]*x509.CertificateWithMetadata, 0), err
 	}
 
-	certsWithMetadata := make([]*x509CertificateWithMetadata, 0, len(pkcs7Object.Certificates))
+	certsWithMetadata := make([]*x509.CertificateWithMetadata, 0, len(pkcs7Object.Certificates))
 
 	for _, cert := range pkcs7Object.Certificates {
-		certWithMetadata, err := newX509CertificateWithMetadata(cert, path)
+		certWithMetadata, err := x509.NewX509CertificateWithMetadata(cert, path)
 		if err != nil {
-			return make([]*x509CertificateWithMetadata, 0), err
+			return make([]*x509.CertificateWithMetadata, 0), err
 		}
 		certsWithMetadata = append(certsWithMetadata, certWithMetadata)
 	}
