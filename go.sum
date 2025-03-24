@@ -337,8 +337,8 @@ github.com/xo/terminfo v0.0.0-20220910002029-abceb7e1c41e/go.mod h1:RbqR21r5mrJu
 github.com/yuin/goldmark v1.1.27/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.2.1/go.mod h1:3hX8gzYuyVAZsxl0MRgGTJEmQBFcNTphYh9decYSb74=
 github.com/yuin/goldmark v1.4.13/go.mod h1:6yULJ656Px+3vBD8DxQVa3kxgyrAnzto9xy5taEt/CY=
-github.com/zricethezav/gitleaks/v8 v8.24.0 h1:yrJ81El2tCBrhp6fapUBvqgCXVdh1w/P5DdZOZUQqB0=
-github.com/zricethezav/gitleaks/v8 v8.24.0/go.mod h1:hAWbK85gzn04aqM6jI8paV6YJsUsh6cVV+BYQB6T+Bc=
+github.com/zricethezav/gitleaks/v8 v8.24.2 h1:z7bpKxdQfgOOTHz4KFCzuQ3jExVFwBKAN3vbn+ONZY0=
+github.com/zricethezav/gitleaks/v8 v8.24.2/go.mod h1:D3AhHRLVp0DigFQNxAgHcQks8EbF7wCZanT/UbGd0Jo=
 go.opencensus.io v0.24.0 h1:y73uSU6J157QMP2kn2r30vwW1A2W2WFwSCGnAVxeaD0=
 go.opencensus.io v0.24.0/go.mod h1:vNK8G9p7aAivkbmorf4v+7Hgx+Zs0yY+0fOtgBfjQKo=
 go.opentelemetry.io/auto/sdk v1.1.0 h1:cH53jehLUN6UFLY71z+NDOiNJqDdPRaXzTel0sJySYA=
