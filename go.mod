@@ -13,7 +13,7 @@ require (
 	github.com/sirupsen/logrus v1.9.3
 	github.com/smallstep/pkcs7 v0.2.1
 	github.com/spf13/cobra v1.9.1
-	github.com/spf13/viper v1.20.0
+	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/zricethezav/gitleaks/v8 v8.24.2
 	go.uber.org/dig v1.18.1
