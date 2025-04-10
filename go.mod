@@ -8,7 +8,7 @@ require (
 	github.com/docker/docker v28.0.2+incompatible
 	github.com/google/go-containerregistry v0.20.3
 	github.com/google/uuid v1.6.0
-	github.com/magiconair/properties v1.8.9
+	github.com/magiconair/properties v1.8.10
 	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/sirupsen/logrus v1.9.3
 	github.com/smallstep/pkcs7 v0.2.1
