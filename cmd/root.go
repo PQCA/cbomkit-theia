@@ -43,10 +43,10 @@ var rootCmd = &cobra.Command{
  ╚═════╝╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═╝ by IBM Research
 
 CBOMkit-theia analyzes cryptographic assets in a container image or directory.
-It is part of CBOMkit (https://github.com/IBM/cbomkit) by IBM Research.
+It is part of CBOMkit (https://github.com/PQCA/cbomkit) donated to PQCA by IBM Research.
 
 --> Disclaimer: CBOMkit-theia does *not* perform source code scanning <--
---> Use https://github.com/IBM/sonar-cryptography for source code scanning <--
+--> Use https://github.com/PQCA/sonar-cryptography for source code scanning <--
 
 Features
 - Find certificates in your image/directory

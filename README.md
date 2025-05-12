@@ -1,11 +1,11 @@
 # CBOMkit-theia
 
-[![GitHub License](https://img.shields.io/github/license/IBM/cbomkit-theia)](https://opensource.org/licenses/Apache-2.0)
+[![GitHub License](https://img.shields.io/github/license/PQCA/cbomkit-theia)](https://opensource.org/licenses/Apache-2.0)
 
 This repository contains CBOMkit-theia: a tool that detects cryptographic assets in container images as well as directories and generates [CBOM](https://cyclonedx.org/capabilities/cbom/).
 
 > [!NOTE] 
-> CBOMkit-theia is part of [CBOMkit](https://github.com/IBM/cbomkit) and meant to run in conjunction with the [Sonar Cryptography Plugin](https://github.com/IBM/sonar-cryptography) by IBM Research.
+> CBOMkit-theia is part of [CBOMkit](https://github.com/PQCA/cbomkit) and meant to run in conjunction with the [Sonar Cryptography Plugin](https://github.com/PQCA/sonar-cryptography) donated to PQCA by IBM Research.
 
 ```
  ██████╗██████╗  ██████╗ ███╗   ███╗██╗  ██╗██╗████████╗████████╗██╗  ██╗███████╗██╗ █████╗ 
@@ -16,10 +16,10 @@ This repository contains CBOMkit-theia: a tool that detects cryptographic assets
  ╚═════╝╚═════╝  ╚═════╝ ╚═╝     ╚═╝╚═╝  ╚═╝╚═╝   ╚═╝      ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝╚═╝  ╚═╝ by IBM Research
 
 CBOMkit-theia analyzes cryptographic assets in a container image or directory.
-It is part of cbomkit (https://github.com/IBM/cbomkit) by IBM Research.
+It is part of cbomkit (https://github.com/PQCA/cbomkit) donated to PQCA by IBM Research.
 
 --> Disclaimer: CBOMkit-theia does *not* perform source code scanning <--
---> Use https://github.com/IBM/sonar-cryptography for source code scanning <--
+--> Use https://github.com/PQCA/sonar-cryptography for source code scanning <--
 
 Features
 - Find certificates in your image/directory
@@ -134,7 +134,7 @@ By default, all available plugins are enabled:
     - Leverages [gitleaks](https://github.com/gitleaks/gitleaks) to find secrets and keys in the data source
     - Add the secrets and keys (private, public and secret keys) to the CBOM
 
-Additional plugins can be added by implementing the `Plugin` interface from [`ibm/cbomkit-theia/scanner/plugins`](./scanner/plugins/plugin.go#L41) and adding the plugins constructor to the `GetAllPluginConstructors` function in [`ibm/cbomkit-theia/scanner/scanner.go`](./scanner/scanner.go#L58): 
+Additional plugins can be added by implementing the `Plugin` interface from [`cbomkit-theia/scanner/plugins`](./scanner/plugins/plugin.go#L41) and adding the plugins constructor to the `GetAllPluginConstructors` function in [`cbomkit-theia/scanner/scanner.go`](./scanner/scanner.go#L58): 
 
 ## Security Disclaimer
 CBOMkit-theia performs several filesystem reads based on the user input and may print the contents of these files to the stderr console. Do not use this tools on untrusted input or provide the output to untrusted parties.
@@ -143,7 +143,7 @@ CBOMkit-theia performs several filesystem reads based on the user input and may 
 
 If you'd like to contribute to CBOMkit-theia, please take a look at our [contribution guidelines](CONTRIBUTING.md). By participating, you are expected to uphold our [code of conduct](CODE_OF_CONDUCT.md).
 
-We use [GitHub issues](https://github.com/IBM/cbomkit-theia/issues) for tracking requests and bugs. For questions start a discussion using [GitHub Discussions](https://github.com/IBM/cbomkit-theia/discussions).
+We use [GitHub issues](https://github.com/PQCA/cbomkit-theia/issues) for tracking requests and bugs. For questions start a discussion using [GitHub Discussions](https://github.com/PQCA/cbomkit-theia/discussions).
 
 ## License
 
