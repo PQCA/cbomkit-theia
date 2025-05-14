@@ -16,7 +16,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	github.com/zricethezav/gitleaks/v8 v8.26.0
-	go.uber.org/dig v1.18.2
+	go.uber.org/dig v1.19.0
 	golang.org/x/crypto v0.38.0
 )
 
