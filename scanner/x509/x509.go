@@ -20,6 +20,7 @@ import (
 	"crypto/x509"
 	"fmt"
 	"path/filepath"
+        "strings"
 	"time"
 
 	"github.com/IBM/cbomkit-theia/scanner/errors"
@@ -130,7 +131,7 @@ func (x509CertificateWithMetadata *CertificateWithMetadata) getCertificateCompon
 				NotValidBefore:       x509CertificateWithMetadata.NotBefore.Format(time.RFC3339),
 				NotValidAfter:        x509CertificateWithMetadata.NotAfter.Format(time.RFC3339),
 				CertificateFormat:    x509CertificateWithMetadata.format,
-				CertificateExtension: filepath.Ext(x509CertificateWithMetadata.path),
+				CertificateExtension: strings.TrimPrefix(filepath.Ext(x509CertificateWithMetadata.path), "."),
 			},
 		},
 		Evidence: &cdx.Evidence{
